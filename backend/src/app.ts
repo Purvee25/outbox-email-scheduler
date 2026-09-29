@@ -15,6 +15,7 @@ import { HttpError } from "./lib/http-error.js";
 import { logger } from "./lib/logger.js";
 import { redis, sessionRedis } from "./lib/redis.js";
 import { requireAuth, requireTrustedOrigin } from "./middleware/auth.js";
+import { campaignsRouter, emailsRouter } from "./routes/campaigns.js";
 import { meRouter } from "./routes/me.js";
 
 const SESSION_TTL_SECONDS = 7 * 24 * 60 * 60;
@@ -70,6 +71,8 @@ export function createApp(): express.Express {
 
   app.use("/auth", googleAuthRouter);
   app.use("/api/me", requireAuth, meRouter);
+  app.use("/api/campaigns", requireAuth, campaignsRouter);
+  app.use("/api/emails", requireAuth, emailsRouter);
 
   app.use((_req, _res, next) => next(new HttpError(404, "Not found")));
   app.use(

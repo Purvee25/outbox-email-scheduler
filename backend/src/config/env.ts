@@ -34,6 +34,9 @@ const envSchema = z.object({
   SLACK_CLIENT_ID: z.string().optional(),
   SLACK_CLIENT_SECRET: z.string().optional(),
 
+  // "ethereal" sends real SMTP to Ethereal; "log" records messages without a network call
+  // (local runs and load tests, where sending thousands via Ethereal is unnecessary).
+  MAIL_TRANSPORT: z.enum(["ethereal", "log"]).default("ethereal"),
   ETHEREAL_SENDERS: csv,
   ADMIN_EMAILS: csv,
 

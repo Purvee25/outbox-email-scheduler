@@ -10,7 +10,11 @@ const server = createApp().listen(env.PORT, () => {
   logger.info({ port: env.PORT }, "api listening");
 });
 
+let shuttingDown = false;
+
 async function shutdown(signal: string): Promise<void> {
+  if (shuttingDown) return;
+  shuttingDown = true;
   logger.info({ signal }, "shutting down api");
   server.close();
   await Promise.allSettled([pool.end(), redis.quit(), sessionRedis.quit()]);

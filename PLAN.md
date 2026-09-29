@@ -39,14 +39,32 @@ auth/security/frontend 5/10). This file is the working plan; the README is writt
 
 1. **Claim**: `UPDATE emails SET status='sending', lease_token=?, lease_expires_at=now()+LEASE WHERE id=? AND status='scheduled'`.
    0 rows → already handled, complete job (idempotency).
-2. **Min delay**: per-sender `SET rl:gap:{sender} NX PX MIN_DELAY_MS`; on failure → release claim, `job.moveToDelayed(now + pttl, token)`, `throw DelayedError`.
-3. **Hourly limit**: Lua script checks `rl:hour:{sender}:{window}` < `MAX_EMAILS_PER_HOUR_PER_SENDER` and INCRs only on success (TTL 2 h).
-   Over → release claim, move to delayed at next window + slot offset, enqueue Slack notification (deduped once per sender per window).
-4. **Send** with a deterministic `Message-ID: <emailId@scheduler.local>`, SMTP timeouts < worker `lockDuration`.
-5. **Mark** `sent` + message_id + preview_url, or on error: attempts < MAX → back to `scheduled` + BullMQ retry with backoff; else `failed`.
-6. Index status change into Elasticsearch (failure logged + retried; `npm run reindex` rebuilds from MySQL).
+2. **Reserve a send slot** (implemented; replaces the per-job gap lock): one Lua script per sender hands out
+   the next free time — `max(now, nextFree)`, skipping any clock-hour window already at
+   `MAX_EMAILS_PER_HOUR_PER_SENDER`, then `nextFree = slot + MIN_DELAY_MS`. One reservation per job, FIFO per
+   sender, so a 1 000-email backlog drains in order without every job polling. A skipped window = hourly limit
+   hit → Slack notification (block 3, deduped per sender per window).
+3. **Send turn**: compare-and-set on the sender's last _actual_ send time. Reserved slots are exact, but jobs wake
+   with a few ms of queue latency; without this guard a measured gap was 1 927 ms. Now always ≥ `MIN_DELAY_MS`.
+4. Waiting (slot in the future or turn not yet free) → release claim (row shows the new time), keep the
+   reservation in job data, `job.moveToDelayed(ts, token)`, `throw DelayedError`.
+5. **Send** with a deterministic `Message-ID: <emailId@scheduler.local>`, SMTP timeouts < worker `lockDuration`.
+6. **Mark** `sent` + message_id + preview_url, or on error: 5xx or attempts ≥ MAX → `failed`; otherwise back to
+   `scheduled`, reservation dropped, BullMQ retry with backoff.
+7. Index status change into Elasticsearch (failure logged + retried; `npm run reindex` rebuilds from MySQL).
 
 Never sleep inside the processor; never re-add an active job.
+
+### Verified end-to-end (block 2, `MAIL_TRANSPORT=log`)
+
+| Scenario                                       | Result                                                                                                    |
+| ---------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
+| 6 emails, 1 s apart                            | all sent 40–120 ms after scheduled time, 1 attempt each, duplicate recipient removed                      |
+| Worker killed, restarted before due            | all sent once                                                                                             |
+| All Redis queue keys deleted while worker down | worker rebuilt jobs from MySQL on boot, all sent on time                                                  |
+| Hourly limit 7/sender, 9 emails at once        | 5 sent immediately (2 s apart per sender), 4 moved to 17:00:00 / 17:00:02 and sent then, across a restart |
+| 30 emails at once                              | per-sender min gap 2 006–2 009 ms                                                                         |
+| All runs                                       | 55 sent, 0 duplicates, max attempts 1                                                                     |
 
 ## Restart & recovery
 
@@ -89,16 +107,16 @@ Frontend and API on the same site so the session cookie is `SameSite=Lax`. Provi
 
 ## Timeline (48 h)
 
-| Hours | Block                                                                                                            | Status      |
-| ----- | ---------------------------------------------------------------------------------------------------------------- | ----------- |
-| 0–3   | Repo, docker compose, schema, Express skeleton, auth skeleton; you: Google + Slack apps, invite reviewers, Figma | in progress |
-| 3–14  | Scheduler, worker, limiter, idempotency, recovery, tests                                                         |             |
-| 14–20 | Google login end-to-end, Slack connect/disconnect/alert                                                          |             |
-| 20–32 | Frontend per Figma                                                                                               |             |
-| 32–36 | Elasticsearch indexing + search                                                                                  |             |
-| 36–40 | Deploy + load script                                                                                             |             |
-| 40–45 | README + Mermaid diagram + video                                                                                 |             |
-| 45–48 | Buffer                                                                                                           |             |
+| Hours | Block                                                                                                            | Status                   |
+| ----- | ---------------------------------------------------------------------------------------------------------------- | ------------------------ |
+| 0–3   | Repo, docker compose, schema, Express skeleton, auth skeleton; you: Google + Slack apps, invite reviewers, Figma | done; your items pending |
+| 3–14  | Scheduler, worker, limiter, idempotency, recovery, tests                                                         | done                     |
+| 14–20 | Google login end-to-end, Slack connect/disconnect/alert                                                          |                          |
+| 20–32 | Frontend per Figma                                                                                               |                          |
+| 32–36 | Elasticsearch indexing + search                                                                                  |                          |
+| 36–40 | Deploy + load script                                                                                             |                          |
+| 40–45 | README + Mermaid diagram + video                                                                                 |                          |
+| 45–48 | Buffer                                                                                                           |                          |
 
 ## Cut
 
