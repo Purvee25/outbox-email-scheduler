@@ -9,11 +9,14 @@ import {
   reconcileScheduledEmails,
   scheduleNextSweep,
 } from "./queue/maintenance.js";
+import { processNotificationJob } from "./queue/notifications.js";
 import {
   EMAIL_QUEUE,
   MAINTENANCE_QUEUE,
+  NOTIFICATION_QUEUE,
   emailQueue,
   maintenanceQueue,
+  notificationQueue,
   type EmailJobData,
 } from "./queue/queues.js";
 
@@ -28,6 +31,11 @@ const emailWorker = new Worker<EmailJobData>(EMAIL_QUEUE, processEmailJob, {
 const maintenanceWorker = new Worker(MAINTENANCE_QUEUE, processMaintenanceJob, {
   connection: createBullConnection(),
 });
+// Separate queue so a slow or failing Slack call never holds up email sending.
+const notificationWorker = new Worker(NOTIFICATION_QUEUE, processNotificationJob, {
+  connection: createBullConnection(),
+});
+const workers = [emailWorker, maintenanceWorker, notificationWorker];
 
 emailWorker.on("failed", (job, error) => {
   logger.warn(
@@ -35,7 +43,7 @@ emailWorker.on("failed", (job, error) => {
     "email job failed",
   );
 });
-for (const worker of [emailWorker, maintenanceWorker]) {
+for (const worker of workers) {
   worker.on("error", (error) => logger.error({ err: error }, "worker error"));
 }
 
@@ -52,10 +60,11 @@ async function shutdown(signal: string): Promise<void> {
   if (shuttingDown) return;
   shuttingDown = true;
   logger.info({ signal }, "shutting down worker; waiting for active jobs");
-  await Promise.allSettled([emailWorker.close(), maintenanceWorker.close()]);
+  await Promise.allSettled(workers.map((worker) => worker.close()));
   await Promise.allSettled([
     emailQueue.close(),
     maintenanceQueue.close(),
+    notificationQueue.close(),
     pool.end(),
     redis.quit(),
   ]);

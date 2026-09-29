@@ -8,6 +8,13 @@
       "when": 1790699041880,
       "tag": "0000_init",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "5",
+      "when": 1790701828918,
+      "tag": "0001_slack_access_token",
+      "breakpoints": true
     }
   ]
 }

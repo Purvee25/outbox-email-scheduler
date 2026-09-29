@@ -108,6 +108,7 @@ export async function findEmailForSend(emailId: string) {
       id: emails.id,
       recipient: emails.recipient,
       sender: emails.sender,
+      userId: emails.userId,
       subject: campaigns.subject,
       body: campaigns.body,
     })

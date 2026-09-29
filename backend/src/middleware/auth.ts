@@ -1,5 +1,6 @@
 import type { NextFunction, Request, Response } from "express";
 import { env } from "../config/env.js";
+import { db } from "../db/client.js";
 import { HttpError } from "../lib/http-error.js";
 
 const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
@@ -40,6 +41,20 @@ export function requireTrustedOrigin(
   const origin = req.get("origin");
   if (origin !== env.FRONTEND_ORIGIN) {
     next(new HttpError(403, "Untrusted origin"));
+    return;
+  }
+  next();
+}
+
+/** Allows only users whose email is listed in ADMIN_EMAILS; use after `requireAuth`. */
+export async function requireAdmin(req: Request, _res: Response, next: NextFunction): Promise<void> {
+  const user = await db.query.users.findFirst({
+    columns: { email: true },
+    where: (u, { eq }) => eq(u.id, currentUserId(req)),
+  });
+  const admins = new Set(env.ADMIN_EMAILS.map((email) => email.toLowerCase()));
+  if (!user || !admins.has(user.email.toLowerCase())) {
+    next(new HttpError(403, "Admin access required"));
     return;
   }
   next();

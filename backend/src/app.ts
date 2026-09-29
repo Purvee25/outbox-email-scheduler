@@ -8,15 +8,18 @@ import express, {
 import session from "express-session";
 import helmet from "helmet";
 import { pinoHttp } from "pino-http";
+import { BULL_BOARD_PATH, createBullBoardRouter } from "./admin/bull-board.js";
 import { SESSION_COOKIE_NAME, googleAuthRouter } from "./auth/google.js";
 import { env, isProduction } from "./config/env.js";
 import { pool } from "./db/client.js";
 import { HttpError } from "./lib/http-error.js";
 import { logger } from "./lib/logger.js";
 import { redis, sessionRedis } from "./lib/redis.js";
-import { requireAuth, requireTrustedOrigin } from "./middleware/auth.js";
+import { requireAdmin, requireAuth, requireTrustedOrigin } from "./middleware/auth.js";
+import { createRateLimiters } from "./middleware/rate-limit.js";
 import { campaignsRouter, emailsRouter } from "./routes/campaigns.js";
 import { meRouter } from "./routes/me.js";
+import { slackRouter } from "./routes/slack.js";
 
 const SESSION_TTL_SECONDS = 7 * 24 * 60 * 60;
 const BODY_LIMIT = "1mb";
@@ -69,10 +72,14 @@ export function createApp(): express.Express {
       .json({ status: healthy ? "ok" : "degraded", mysql, redis: redisCheck });
   });
 
-  app.use("/auth", googleAuthRouter);
+  const limiters = createRateLimiters();
+  app.use("/auth", limiters.auth, googleAuthRouter);
   app.use("/api/me", requireAuth, meRouter);
+  app.post("/api/campaigns", requireAuth, limiters.createCampaign);
   app.use("/api/campaigns", requireAuth, campaignsRouter);
   app.use("/api/emails", requireAuth, emailsRouter);
+  app.use("/api/slack", requireAuth, slackRouter);
+  app.use(BULL_BOARD_PATH, requireAuth, requireAdmin, createBullBoardRouter());
 
   app.use((_req, _res, next) => next(new HttpError(404, "Not found")));
   app.use(

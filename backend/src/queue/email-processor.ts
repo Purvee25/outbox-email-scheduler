@@ -12,7 +12,9 @@ import {
 import { logger } from "../lib/logger.js";
 import { redis } from "../lib/redis.js";
 import { isPermanentSmtpError, sendEmail } from "../mail/transport.js";
+import { HOUR_MS } from "../scheduling/plan-sends.js";
 import { acquireSendTurn, reserveSendSlot } from "../scheduling/send-slots.js";
+import { notifyRateLimitHit } from "./notifications.js";
 import type { EmailJobData } from "./queues.js";
 
 /** Longer than SMTP timeouts plus lock renewal, so a live worker never loses its lease. */
@@ -49,7 +51,7 @@ export async function processEmailJob(
       logger.warn({ emailId }, "email row missing; dropping job");
       return;
     }
-    sendAt = await resolveSendSlot(job, email.sender);
+    sendAt = await resolveSendSlot(job, email);
     const now = Date.now();
     waitMs =
       sendAt > now
@@ -86,22 +88,33 @@ export async function processEmailJob(
 
 async function resolveSendSlot(
   job: Job<EmailJobData>,
-  sender: string,
+  email: { sender: string; userId: string },
 ): Promise<number> {
   if (job.data.reservedAt !== undefined) return job.data.reservedAt;
 
-  const reservation = await reserveSendSlot(redis, sender, {
+  const reservation = await reserveSendSlot(redis, email.sender, {
     minDelayMs: env.MIN_DELAY_MS,
     maxPerHour: env.MAX_EMAILS_PER_HOUR_PER_SENDER,
   });
   if (reservation.hourlyLimitHit) {
+    const resumesAt = new Date(reservation.sendAt).toISOString();
     logger.warn(
-      {
-        emailId: job.data.emailId,
-        sender,
-        sendAt: new Date(reservation.sendAt).toISOString(),
-      },
+      { emailId: job.data.emailId, sender: email.sender, sendAt: resumesAt },
       "hourly limit reached for sender; email moved to next window",
+    );
+    await notifyRateLimitHit({
+      userId: email.userId,
+      sender: email.sender,
+      // One alert per sender per clock hour in which the limit was hit, however many
+      // future windows the backlog spills into.
+      window: Math.floor(Date.now() / HOUR_MS),
+      limit: env.MAX_EMAILS_PER_HOUR_PER_SENDER,
+      resumesAt,
+    }).catch((error: unknown) =>
+      logger.error(
+        { err: error, sender: email.sender },
+        "failed to queue rate-limit notification",
+      ),
     );
   }
   return reservation.sendAt;

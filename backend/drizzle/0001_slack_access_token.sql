@@ -1,0 +1,1 @@
+ALTER TABLE `slack_connections` ADD `access_token_enc` text NOT NULL;

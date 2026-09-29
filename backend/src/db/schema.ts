@@ -31,8 +31,10 @@ export const slackConnections = mysqlTable("slack_connections", {
   userId: varchar("user_id", { length: 36 })
     .primaryKey()
     .references(() => users.id, { onDelete: "cascade" }),
-  // AES-256-GCM ciphertext of the incoming-webhook URL.
+  // AES-256-GCM ciphertexts; the webhook URL is itself a bearer credential.
   webhookUrlEnc: text("webhook_url_enc").notNull(),
+  // Kept only so Disconnect can revoke the app installation via auth.revoke.
+  accessTokenEnc: text("access_token_enc").notNull(),
   channel: varchar("channel", { length: 255 }),
   teamName: varchar("team_name", { length: 255 }),
   connectedAt: createdAt(),

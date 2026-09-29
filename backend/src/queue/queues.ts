@@ -4,6 +4,7 @@ import { createBullConnection } from "../lib/redis.js";
 
 export const EMAIL_QUEUE = "email-send";
 export const MAINTENANCE_QUEUE = "maintenance";
+export const NOTIFICATION_QUEUE = "notifications";
 
 const ENQUEUE_CHUNK_SIZE = 500;
 const RETRY_BACKOFF_MS = 5_000;
@@ -27,6 +28,10 @@ export const emailQueue = new Queue<EmailJobData>(EMAIL_QUEUE, {
     removeOnComplete: { age: KEEP_COMPLETED_SECONDS, count: 1000 },
     removeOnFail: { age: KEEP_FAILED_SECONDS },
   },
+});
+
+export const notificationQueue = new Queue(NOTIFICATION_QUEUE, {
+  connection: createBullConnection(),
 });
 
 export const maintenanceQueue = new Queue(MAINTENANCE_QUEUE, {

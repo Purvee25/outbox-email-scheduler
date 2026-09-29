@@ -1,10 +1,11 @@
-import { randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
+import { randomUUID } from "node:crypto";
 import { Router, type Request } from "express";
 import { CodeChallengeMethod, OAuth2Client } from "google-auth-library";
 import { env } from "../config/env.js";
 import { db } from "../db/client.js";
 import { users } from "../db/schema.js";
 import { HttpError } from "../lib/http-error.js";
+import { createOAuthState, oauthStatesMatch } from "../lib/oauth-state.js";
 
 const GOOGLE_SCOPES = ["openid", "email", "profile"];
 const REDIRECT_URI = new URL(
@@ -21,16 +22,6 @@ function googleClient(): OAuth2Client {
     clientSecret: env.GOOGLE_CLIENT_SECRET,
     redirectUri: REDIRECT_URI,
   });
-}
-
-function statesMatch(expected: string | undefined, received: unknown): boolean {
-  if (
-    !expected ||
-    typeof received !== "string" ||
-    expected.length !== received.length
-  )
-    return false;
-  return timingSafeEqual(Buffer.from(expected), Buffer.from(received));
 }
 
 function regenerateSession(req: Request): Promise<void> {
@@ -69,7 +60,7 @@ googleAuthRouter.get("/google", async (req, res) => {
   const client = googleClient();
   const { codeVerifier, codeChallenge } =
     await client.generateCodeVerifierAsync();
-  const state = randomBytes(32).toString("hex");
+  const state = createOAuthState();
   req.session.oauthState = state;
   req.session.codeVerifier = codeVerifier;
 
@@ -94,7 +85,7 @@ googleAuthRouter.get("/google/callback", async (req, res) => {
     return;
   }
   if (
-    !statesMatch(oauthState, state) ||
+    !oauthStatesMatch(oauthState, state) ||
     typeof code !== "string" ||
     !codeVerifier
   ) {
