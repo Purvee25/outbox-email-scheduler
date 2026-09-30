@@ -1,4 +1,4 @@
-import { and, asc, eq, gt, inArray, lt, lte, sql } from "drizzle-orm";
+import { and, asc, eq, gt, inArray, lt, lte, ne, sql } from "drizzle-orm";
 import { db } from "./client.js";
 import { campaigns, emails } from "./schema.js";
 
@@ -127,8 +127,14 @@ export async function findEmailForSend(emailId: string) {
  * can still record success via `markSent`.
  */
 export async function expireLeases(now: Date = new Date()): Promise<string[]> {
-  const expiredLease = and(eq(emails.status, "sending"), lt(emails.leaseExpiresAt, now));
-  const rows = await db.select({ id: emails.id }).from(emails).where(expiredLease);
+  const expiredLease = and(
+    eq(emails.status, "sending"),
+    lt(emails.leaseExpiresAt, now),
+  );
+  const rows = await db
+    .select({ id: emails.id })
+    .from(emails)
+    .where(expiredLease);
   if (rows.length === 0) return [];
   const ids = rows.map((row) => row.id);
   // Re-check the condition in the UPDATE: a worker may have finished since the SELECT.
@@ -159,7 +165,11 @@ export async function scheduledEmailsAfter(
     .limit(limit);
 }
 
-export async function setStarred(userId: string, emailId: string, starred: boolean): Promise<boolean> {
+export async function setStarred(
+  userId: string,
+  emailId: string,
+  starred: boolean,
+): Promise<boolean> {
   const [result] = await db
     .update(emails)
     .set({ starred })
@@ -167,7 +177,11 @@ export async function setStarred(userId: string, emailId: string, starred: boole
   return result.affectedRows === 1;
 }
 
-export async function setArchived(userId: string, emailId: string, archived: boolean): Promise<boolean> {
+export async function setArchived(
+  userId: string,
+  emailId: string,
+  archived: boolean,
+): Promise<boolean> {
   const [result] = await db
     .update(emails)
     .set({ archivedAt: archived ? new Date() : null })
@@ -175,9 +189,25 @@ export async function setArchived(userId: string, emailId: string, archived: boo
   return result.affectedRows === 1;
 }
 
-export async function deleteEmailRow(userId: string, emailId: string): Promise<boolean> {
+export type DeleteEmailResult = "deleted" | "not_found" | "sending";
+
+/**
+ * Hard-deletes an email the user owns. A `sending` row is refused: its SMTP call is already in
+ * flight and can't be recalled. Deleting a `scheduled` row is enough to stop the send, because the
+ * worker's claim (`UPDATE … WHERE status='scheduled'`) then matches nothing.
+ */
+export async function deleteEmailRow(
+  userId: string,
+  emailId: string,
+): Promise<DeleteEmailResult> {
+  const owned = and(eq(emails.id, emailId), eq(emails.userId, userId));
   const [result] = await db
     .delete(emails)
-    .where(and(eq(emails.id, emailId), eq(emails.userId, userId)));
-  return result.affectedRows === 1;
+    .where(and(owned, ne(emails.status, "sending")));
+  if (result.affectedRows === 1) return "deleted";
+  const [existing] = await db
+    .select({ id: emails.id })
+    .from(emails)
+    .where(owned);
+  return existing ? "sending" : "not_found";
 }

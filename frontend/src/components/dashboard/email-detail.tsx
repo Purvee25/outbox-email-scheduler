@@ -2,6 +2,7 @@
 
 import type { User } from "@scheduler/shared";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 import { AttachmentCard } from "@/components/ui/attachment-card";
 import { Avatar } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
@@ -27,29 +28,43 @@ export function EmailDetail({
   });
   const email = query.data;
 
+  const refresh = () => {
+    void queryClient.invalidateQueries({ queryKey: queryKeys.email(emailId) });
+    void queryClient.invalidateQueries({ queryKey: queryKeys.allEmails });
+  };
+
   const toggleStar = useMutation({
     mutationFn: (starred: boolean) => api.setStarred(emailId, starred),
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: queryKeys.email(emailId) });
-      void queryClient.invalidateQueries({ queryKey: queryKeys.allEmails });
-    },
+    onSuccess: refresh,
+    onError: (error) => toast.error(`Couldn't update star: ${error.message}`),
   });
 
   const toggleArchive = useMutation({
     mutationFn: (archived: boolean) => api.setArchived(emailId, archived),
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: queryKeys.email(emailId) });
-      void queryClient.invalidateQueries({ queryKey: queryKeys.allEmails });
+    onSuccess: (_, archived) => {
+      refresh();
+      toast.success(archived ? "Moved to Archived" : "Moved out of Archived");
     },
+    onError: (error) => toast.error(`Couldn't archive: ${error.message}`),
   });
 
   const deleteMutation = useMutation({
     mutationFn: () => api.deleteEmail(emailId),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.allEmails });
+      toast.success("Email deleted");
       onBack();
     },
+    onError: (error) => toast.error(`Couldn't delete: ${error.message}`),
   });
+
+  function confirmDelete() {
+    const warning =
+      email?.status === "scheduled"
+        ? "Delete this email? It is still scheduled and will not be sent."
+        : "Delete this email permanently?";
+    if (window.confirm(warning)) deleteMutation.mutate();
+  }
 
   return (
     <div className="animate-fade-up mx-auto flex min-h-screen max-w-[1100px] flex-col px-6 pb-10">
@@ -98,7 +113,7 @@ export function EmailDetail({
               variant="ghost"
               size="sm"
               className="text-danger-fg hover:bg-danger-bg hover:text-danger-fg"
-              onClick={() => deleteMutation.mutate()}
+              onClick={confirmDelete}
               loading={deleteMutation.isPending}
             >
               Delete
@@ -113,7 +128,11 @@ export function EmailDetail({
           <p className="text-sm text-danger-fg">
             Couldn&apos;t load this email: {query.error.message}
           </p>
-          <Button variant="secondary" size="sm" onClick={() => void query.refetch()}>
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={() => void query.refetch()}
+          >
             Try again
           </Button>
         </div>
@@ -136,10 +155,10 @@ export function EmailDetail({
               {email.sender[0]?.toUpperCase()}
             </span>
             <div className="min-w-0 flex-1 leading-snug">
-              <p className="truncate text-lg font-semibold">
-                {email.sender}
+              <p className="truncate text-lg font-semibold">{email.sender}</p>
+              <p className="truncate text-sm text-ink-muted">
+                To: {email.recipient}
               </p>
-              <p className="truncate text-sm text-ink-muted">To: {email.recipient}</p>
             </div>
             <div className="flex flex-col items-end gap-2 text-sm text-ink-muted">
               <StatusBadge
@@ -154,7 +173,10 @@ export function EmailDetail({
           </div>
 
           {email.error && (
-            <p role="alert" className="mt-6 rounded-control bg-danger-bg px-4 py-3 text-sm text-danger-fg">
+            <p
+              role="alert"
+              className="mt-6 rounded-control bg-danger-bg px-4 py-3 text-sm text-danger-fg"
+            >
               {email.error}
             </p>
           )}
@@ -172,7 +194,11 @@ export function EmailDetail({
                   key={attachment.id}
                   attachment={attachment}
                   href={attachmentUrl(attachment.id)}
-                  thumbnail={attachment.contentType.startsWith("image/") ? attachmentUrl(attachment.id) : undefined}
+                  thumbnail={
+                    attachment.contentType.startsWith("image/")
+                      ? attachmentUrl(attachment.id)
+                      : undefined
+                  }
                 />
               ))}
             </ul>

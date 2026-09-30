@@ -51,8 +51,15 @@ emailsRouter.put("/:id/archive", async (req, res) => {
 
 emailsRouter.delete("/:id", async (req, res) => {
   const id = parseOrThrow(z.uuid(), req.params.id);
-  const deleted = await deleteEmailRow(currentUserId(req), id);
-  if (!deleted) throw new HttpError(404, "Email not found");
+  const result = await deleteEmailRow(currentUserId(req), id);
+  if (result === "not_found") throw new HttpError(404, "Email not found");
+  if (result === "sending") {
+    throw new HttpError(
+      409,
+      "This email is being sent right now and can't be deleted",
+    );
+  }
+  // Tidies the queue; the missing row alone already guarantees the job won't send.
   await emailQueue.remove(emailJobId(id));
   requestIndexingSafely([id]);
   res.sendStatus(204);

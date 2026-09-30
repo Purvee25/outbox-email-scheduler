@@ -66,7 +66,10 @@ export const createCampaignSchema = z.object({
       MAX_RECIPIENTS_PER_CAMPAIGN,
       `At most ${MAX_RECIPIENTS_PER_CAMPAIGN} recipients per campaign`,
     ),
-  attachmentIds: z.array(z.uuid()).max(MAX_ATTACHMENTS_PER_CAMPAIGN).default([]),
+  attachmentIds: z
+    .array(z.uuid())
+    .max(MAX_ATTACHMENTS_PER_CAMPAIGN)
+    .default([]),
   startAt: z.iso.datetime({ offset: true, error: "Choose a valid start time" }),
   delayMs: z
     .number({ error: "Enter a delay in seconds" })
@@ -92,7 +95,11 @@ export type CreateCampaignResponse = z.infer<
   typeof createCampaignResponseSchema
 >;
 
-/** Dashboard tabs: "scheduled" shows scheduled + sending, "sent" and "archived" show sent + failed. */
+/**
+ * Dashboard tabs: "scheduled" shows scheduled + sending, "sent" shows sent + failed (both
+ * unarchived). "archived" shows every status, so an archived email that is still scheduled
+ * stays visible instead of vanishing while it waits to send.
+ */
 export const EMAIL_TABS = ["scheduled", "sent", "archived"] as const;
 export const emailTabSchema = z.enum(EMAIL_TABS);
 export type EmailTab = z.infer<typeof emailTabSchema>;
@@ -100,7 +107,7 @@ export type EmailTab = z.infer<typeof emailTabSchema>;
 export const TAB_STATUSES: Record<EmailTab, readonly EmailStatus[]> = {
   scheduled: ["scheduled", "sending"],
   sent: ["sent", "failed"],
-  archived: ["sent", "failed"],
+  archived: ["scheduled", "sending", "sent", "failed"],
 };
 
 export const MAX_SEARCH_LENGTH = 200;
@@ -140,7 +147,10 @@ export function bodyPreview(body: string): string {
   const flat = body
     .replace(/<\/(p|li|h[1-3]|blockquote)>|<br\s*\/?>/gi, " ")
     .replace(/<[^>]*>/g, "")
-    .replace(/&(amp|lt|gt|quot|#39|nbsp);/g, (entity) => HTML_ENTITIES[entity] ?? entity)
+    .replace(
+      /&(amp|lt|gt|quot|#39|nbsp);/g,
+      (entity) => HTML_ENTITIES[entity] ?? entity,
+    )
     .replace(/\s+/g, " ")
     .trim();
   return flat.length > PREVIEW_LENGTH
@@ -180,7 +190,10 @@ export type ListEmailsResponse = z.infer<typeof listEmailsResponseSchema>;
 
 export const updateEmailSchema = z
   .object({ starred: z.boolean().optional(), archived: z.boolean().optional() })
-  .refine((value) => value.starred !== undefined || value.archived !== undefined, {
-    message: "Provide starred or archived",
-  });
+  .refine(
+    (value) => value.starred !== undefined || value.archived !== undefined,
+    {
+      message: "Provide starred or archived",
+    },
+  );
 export type UpdateEmailInput = z.infer<typeof updateEmailSchema>;
