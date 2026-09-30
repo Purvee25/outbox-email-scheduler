@@ -489,6 +489,27 @@ export function ComposeView({
         </div>
 
         <div>
+          <div className={ROW}>
+            <label htmlFor="send-at" className={LABEL}>
+              Send at
+            </label>
+            <input
+              id="send-at"
+              type="datetime-local"
+              value={scheduledAt}
+              onChange={(e) => setScheduledAt(e.target.value)}
+              aria-invalid={errors.startAt ? true : undefined}
+              className={UNDERLINE_INPUT}
+            />
+          </div>
+          {errors.startAt && (
+            <p role="alert" className="mt-1 pl-32 text-xs text-danger-fg">
+              {errors.startAt}
+            </p>
+          )}
+        </div>
+
+        <div>
           <div className="flex items-center gap-8">
             <div className="flex items-center gap-3">
               <label
