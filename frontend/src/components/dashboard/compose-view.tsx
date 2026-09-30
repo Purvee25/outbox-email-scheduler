@@ -489,33 +489,43 @@ export function ComposeView({
         </div>
 
         <div>
-          <div className={`${ROW} flex-wrap`}>
-            <label htmlFor="delay" className="text-[15px]">
-              Delay between 2 emails
-            </label>
-            <Input
-              id="delay"
-              type="number"
-              min={0}
-              step={1}
-              value={delaySeconds}
-              onChange={(event) => setDelaySeconds(event.target.value)}
-              placeholder="00"
-              className="w-24 text-center"
-            />
-            <label htmlFor="hourly" className="ml-4 text-[15px]">
-              Hourly Limit
-            </label>
-            <Input
-              id="hourly"
-              type="number"
-              min={1}
-              step={1}
-              value={hourlyLimit}
-              onChange={(event) => setHourlyLimit(event.target.value)}
-              placeholder="00"
-              className="w-24 text-center"
-            />
+          <div className="flex items-center gap-8">
+            <div className="flex items-center gap-3">
+              <label
+                htmlFor="delay"
+                className="shrink-0 text-[15px] text-ink-muted"
+              >
+                Delay (s)
+              </label>
+              <Input
+                id="delay"
+                type="number"
+                min={0}
+                step={1}
+                value={delaySeconds}
+                onChange={(event) => setDelaySeconds(event.target.value)}
+                placeholder="2"
+                className="w-20 text-center"
+              />
+            </div>
+            <div className="flex items-center gap-3">
+              <label
+                htmlFor="hourly"
+                className="shrink-0 text-[15px] text-ink-muted"
+              >
+                Hourly limit
+              </label>
+              <Input
+                id="hourly"
+                type="number"
+                min={1}
+                step={1}
+                value={hourlyLimit}
+                onChange={(event) => setHourlyLimit(event.target.value)}
+                placeholder="200"
+                className="w-20 text-center"
+              />
+            </div>
           </div>
           {(errors.delayMs || errors.hourlyLimit) && (
             <p role="alert" className="mt-1 text-xs text-danger-fg">

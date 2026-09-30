@@ -30,7 +30,11 @@ const TAB_ICONS: Record<EmailTab, ReactNode> = {
     <path d="M17.5 2.5 8.75 11.25M17.5 2.5l-5.5 15-3.25-6.25L2.5 8l15-5.5Z" />
   ),
   archived: (
-    <path strokeLinecap="round" strokeLinejoin="round" d="m20.25 7.5-.625 10.632a2.25 2.25 0 0 1-2.247 2.118H6.622a2.25 2.25 0 0 1-2.247-2.118L3.75 7.5M10 11.25h4.5M3.375 7.5h17.25c.621 0 1.125-.504 1.125-1.125v-1.5c0-.621-.504-1.125-1.125-1.125H3.375c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125Z" />
+    <path
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      d="m20.25 7.5-.625 10.632a2.25 2.25 0 0 1-2.247 2.118H6.622a2.25 2.25 0 0 1-2.247-2.118L3.75 7.5M10 11.25h4.5M3.375 7.5h17.25c.621 0 1.125-.504 1.125-1.125v-1.5c0-.621-.504-1.125-1.125-1.125H3.375c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125Z"
+    />
   ),
 };
 
@@ -115,10 +119,10 @@ export function Sidebar({
   return (
     <aside className="flex w-full shrink-0 flex-col gap-3 p-3 md:sticky md:top-0 md:h-screen md:w-[240px]">
       <p
-        aria-label="ONB"
+        aria-label="Outbox"
         className="px-3 pt-2 pb-1 font-mono text-4xl font-black tracking-tighter"
       >
-        ONB
+        Outbox
       </p>
 
       <details className="group rounded-card bg-field">

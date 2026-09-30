@@ -32,9 +32,9 @@ export function SlackControl({ connected }: { connected: boolean }) {
   }
 
   return (
-    <div className="flex items-center gap-2">
-      <span className="inline-flex items-center gap-1.5 text-sm text-brand-700">
-        <span aria-hidden className="size-2 rounded-full bg-current" />
+    <div className="flex flex-col gap-0.5">
+      <span className="inline-flex items-center gap-1.5 px-2 py-1.5 text-sm font-medium text-brand-700">
+        <span aria-hidden className="size-2 shrink-0 rounded-full bg-current" />
         Slack connected
       </span>
       <Button
@@ -42,6 +42,7 @@ export function SlackControl({ connected }: { connected: boolean }) {
         size="sm"
         loading={sendTest.isPending}
         onClick={() => sendTest.mutate()}
+        className="justify-start"
       >
         Send test
       </Button>
@@ -50,6 +51,7 @@ export function SlackControl({ connected }: { connected: boolean }) {
         size="sm"
         loading={disconnect.isPending}
         onClick={() => disconnect.mutate()}
+        className="justify-start"
       >
         Disconnect
       </Button>

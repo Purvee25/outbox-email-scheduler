@@ -17,6 +17,12 @@ const nextConfig: NextConfig = {
   // Standalone output produces a self-contained server bundle for Docker.
   output: "standalone",
   allowedDevOrigins: DEV_TUNNEL_HOST ? [DEV_TUNNEL_HOST] : [],
+  devIndicators: false,
+  images: {
+    remotePatterns: [
+      { protocol: "https", hostname: "lh3.googleusercontent.com" },
+    ],
+  },
   async rewrites() {
     if (!API_PROXY_TARGET) return [];
     return PROXIED_PATHS.map((path) => ({

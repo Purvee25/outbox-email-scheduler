@@ -31,43 +31,80 @@ const EMPTY_COPY: Record<EmailTab, { title: string; description: string }> = {
   },
 };
 
-function EmailRow({ email, onOpen }: { email: EmailListItem; onOpen: (id: string) => void }) {
+function EmailRow({
+  email,
+  onOpen,
+}: {
+  email: EmailListItem;
+  onOpen: (id: string) => void;
+}) {
+  const displayTime = email.sentAt ?? email.scheduledAt;
   return (
-    <li className="flex items-center gap-4 border-b border-border relative px-4 py-5 text-[15px] hover:bg-field/60">
+    <li className="relative flex items-center gap-4 border-b border-border px-4 py-4 text-[15px] hover:bg-field/60">
       <button
         type="button"
         onClick={() => onOpen(email.id)}
-        className="w-56 shrink-0 truncate text-left after:absolute after:inset-0"
+        className="w-48 shrink-0 truncate text-left text-sm after:absolute after:inset-0"
       >
-        To: {email.recipient}
+        {email.recipient}
       </button>
-      <StatusBadge
-        status={email.status}
-        scheduledAt={email.scheduledAt}
-        title={email.error ?? undefined}
-      />
-      <span className="min-w-0 flex-1 truncate">
+      <span className="min-w-0 flex-1 truncate font-medium">
         {email.subject}
-        {email.preview && <span className="text-ink-muted"> - {email.preview}</span>}
+        {email.preview && (
+          <span className="font-normal text-ink-muted"> — {email.preview}</span>
+        )}
       </span>
-      {email.sentAt && (
-        <time
-          dateTime={email.sentAt}
-          className="shrink-0 text-sm text-ink-muted"
-        >
-          {formatBadgeTime(email.sentAt)}
-        </time>
-      )}
-      {email.previewUrl && (
+      <span className="w-28 shrink-0">
+        <StatusBadge status={email.status} title={email.error ?? undefined} />
+      </span>
+      <time
+        dateTime={displayTime}
+        className="w-32 shrink-0 text-right text-sm text-ink-muted"
+      >
+        {formatBadgeTime(displayTime)}
+      </time>
+      {email.previewUrl ? (
         <a
           href={email.previewUrl}
           target="_blank"
           rel="noopener noreferrer"
-          className="relative z-10 shrink-0 text-sm font-medium text-brand-600 hover:text-brand-700"
+          className="relative z-10 w-14 shrink-0 text-right text-sm font-medium text-brand-600 hover:text-brand-700"
         >
           Preview
         </a>
+      ) : (
+        <span className="w-14 shrink-0" />
       )}
+    </li>
+  );
+}
+
+const TIME_HEADER: Record<EmailTab, string> = {
+  scheduled: "Scheduled for",
+  sent: "Sent at",
+  archived: "Time",
+};
+
+function TableHeader({ tab }: { tab: EmailTab }) {
+  return (
+    <div className="flex items-center gap-4 border-b border-border px-4 py-2 text-xs font-medium uppercase tracking-wide text-ink-muted">
+      <span className="w-48 shrink-0">Recipient</span>
+      <span className="min-w-0 flex-1">Subject</span>
+      <span className="w-28 shrink-0">Status</span>
+      <span className="w-32 shrink-0 text-right">{TIME_HEADER[tab]}</span>
+      <span className="w-14 shrink-0" />
+    </div>
+  );
+}
+
+function SkeletonRow() {
+  return (
+    <li className="flex items-center gap-4 border-b border-border px-4 py-4">
+      <Skeleton className="h-4 w-48 shrink-0" />
+      <Skeleton className="h-4 min-w-0 flex-1" />
+      <Skeleton className="h-6 w-28 shrink-0 rounded-full" />
+      <Skeleton className="h-4 w-32 shrink-0" />
+      <span className="w-14 shrink-0" />
     </li>
   );
 }
@@ -143,13 +180,14 @@ export function EmailTable({
 
   return (
     <>
+      <TableHeader tab={tab} />
       <ul aria-label={tab === "scheduled" ? "Scheduled emails" : "Sent emails"}>
         {rows
-          ? rows.map((email) => <EmailRow key={email.id} email={email} onOpen={onOpen} />)
+          ? rows.map((email) => (
+              <EmailRow key={email.id} email={email} onOpen={onOpen} />
+            ))
           : Array.from({ length: SKELETON_ROWS }, (_, index) => (
-              <li key={index} className="border-b border-border px-4 py-5">
-                <Skeleton className="h-5 w-full" />
-              </li>
+              <SkeletonRow key={index} />
             ))}
       </ul>
       {query.data && (
