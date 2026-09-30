@@ -518,35 +518,78 @@ export function ComposeView({
         <div>
           <div className={ROW}>
             <span className={LABEL}>Send in</span>
-            <div className="flex flex-1 items-center gap-0">
-              {/* Number input */}
-              <input
-                type="number"
-                min={1}
-                max={UNIT_MAX[sendUnit]}
-                value={sendAmount}
-                onChange={(e) => {
-                  const v = Math.max(
-                    1,
-                    Math.min(Number(e.target.value), UNIT_MAX[sendUnit]),
-                  );
-                  setSendAmount(v);
-                  if (sendMode === "offset")
-                    setScheduledAt(offsetNow(v, sendUnit));
-                }}
-                onWheel={(e) => {
-                  e.preventDefault();
-                  const delta = e.deltaY < 0 ? 1 : -1;
-                  const next = Math.max(
-                    1,
-                    Math.min(sendAmount + delta, UNIT_MAX[sendUnit]),
-                  );
-                  setSendAmount(next);
-                  if (sendMode === "offset")
-                    setScheduledAt(offsetNow(next, sendUnit));
-                }}
-                className="h-10 w-16 rounded-l-control border border-r-0 border-border bg-white text-center text-[15px] font-semibold tabular-nums focus:border-brand-500 focus:outline-none"
-              />
+            <div className="flex flex-1 items-center gap-3">
+              {/* − number + stepper */}
+              <div className="flex items-center rounded-control border border-border bg-white overflow-hidden">
+                <button
+                  type="button"
+                  aria-label="Decrease"
+                  onClick={() => {
+                    const next = Math.max(1, sendAmount - 1);
+                    setSendAmount(next);
+                    if (sendMode === "offset")
+                      setScheduledAt(offsetNow(next, sendUnit));
+                  }}
+                  className="flex h-10 w-10 items-center justify-center text-xl font-light text-ink-muted hover:bg-field hover:text-ink active:bg-mint"
+                >
+                  −
+                </button>
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  value={sendAmount}
+                  onClick={(e) => (e.target as HTMLInputElement).select()}
+                  onKeyDown={(e) => {
+                    if (e.key === "ArrowUp") {
+                      e.preventDefault();
+                      const next = Math.min(sendAmount + 1, UNIT_MAX[sendUnit]);
+                      setSendAmount(next);
+                      if (sendMode === "offset")
+                        setScheduledAt(offsetNow(next, sendUnit));
+                    } else if (e.key === "ArrowDown") {
+                      e.preventDefault();
+                      const next = Math.max(1, sendAmount - 1);
+                      setSendAmount(next);
+                      if (sendMode === "offset")
+                        setScheduledAt(offsetNow(next, sendUnit));
+                    }
+                  }}
+                  onChange={(e) => {
+                    const v = Math.max(
+                      1,
+                      Math.min(Number(e.target.value) || 1, UNIT_MAX[sendUnit]),
+                    );
+                    setSendAmount(v);
+                    if (sendMode === "offset")
+                      setScheduledAt(offsetNow(v, sendUnit));
+                  }}
+                  onWheel={(e) => {
+                    e.preventDefault();
+                    const delta = e.deltaY < 0 ? 1 : -1;
+                    const next = Math.max(
+                      1,
+                      Math.min(sendAmount + delta, UNIT_MAX[sendUnit]),
+                    );
+                    setSendAmount(next);
+                    if (sendMode === "offset")
+                      setScheduledAt(offsetNow(next, sendUnit));
+                  }}
+                  className="h-10 w-14 border-x border-border bg-white text-center text-[15px] font-semibold tabular-nums focus:outline-none focus:ring-0"
+                />
+                <button
+                  type="button"
+                  aria-label="Increase"
+                  onClick={() => {
+                    const next = Math.min(sendAmount + 1, UNIT_MAX[sendUnit]);
+                    setSendAmount(next);
+                    if (sendMode === "offset")
+                      setScheduledAt(offsetNow(next, sendUnit));
+                  }}
+                  className="flex h-10 w-10 items-center justify-center text-xl font-light text-ink-muted hover:bg-field hover:text-ink active:bg-mint"
+                >
+                  +
+                </button>
+              </div>
               {/* Segmented unit control */}
               {(["seconds", "minutes", "hours"] as SendUnit[]).map((u, i) => (
                 <button
