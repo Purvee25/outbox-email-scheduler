@@ -525,7 +525,7 @@ export function ComposeView({
                   type="button"
                   aria-label="Decrease"
                   onClick={() => {
-                    const next = Math.max(1, sendAmount - 1);
+                    const next = Math.max(0, sendAmount - 1);
                     setSendAmount(next);
                     if (sendMode === "offset")
                       setScheduledAt(offsetNow(next, sendUnit));
@@ -548,7 +548,7 @@ export function ComposeView({
                         setScheduledAt(offsetNow(next, sendUnit));
                     } else if (e.key === "ArrowDown") {
                       e.preventDefault();
-                      const next = Math.max(1, sendAmount - 1);
+                      const next = Math.max(0, sendAmount - 1);
                       setSendAmount(next);
                       if (sendMode === "offset")
                         setScheduledAt(offsetNow(next, sendUnit));
