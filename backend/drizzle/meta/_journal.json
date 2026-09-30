@@ -36,6 +36,13 @@
       "when": 1790776968557,
       "tag": "0004_petite_songbird",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "5",
+      "when": 1790785506278,
+      "tag": "0005_drop_unused_email_flags",
+      "breakpoints": true
     }
   ]
 }

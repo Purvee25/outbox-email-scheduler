@@ -83,10 +83,9 @@ export const emails = mysqlTable(
     sentAt: datetime("sent_at", { fsp: 3 }),
     error: text("error"),
     starred: boolean("starred").notNull().default(false),
-    // Archive hides a finished email from Sent; delete hides it everywhere (and cancels it if
-    // still scheduled). Rows are kept so history and idempotency stay intact.
+    // Archive moves an email out of Scheduled/Sent into Archived; null means not archived.
+    // Delete is a hard delete (see deleteEmailRow), so there is no deleted_at column.
     archivedAt: datetime("archived_at", { fsp: 3 }),
-    deletedAt: datetime("deleted_at", { fsp: 3 }),
     leaseToken: varchar("lease_token", { length: 64 }),
     leaseExpiresAt: datetime("lease_expires_at", { fsp: 3 }),
     createdAt: createdAt(),
