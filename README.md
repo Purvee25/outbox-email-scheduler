@@ -6,11 +6,24 @@ A full-stack email scheduling system built to the ReachInbox take-home spec.
 Schedule campaigns of up to 5 000 recipients, enforce per-sender hourly limits,
 survive restarts with zero duplicates, and search every email via Elasticsearch.
 
-**Contents:** [Architecture](#architecture) · [Local development](#local-development) ·
+**Contents:** [Demo](#demo) · [Architecture](#architecture) · [Local development](#local-development) ·
 [Scheduling algorithm](#scheduling-algorithm) · [Worker flow](#worker-flow-per-job) ·
 [Restart & recovery](#restart--recovery) · [Behaviour under load](#behaviour-under-load) ·
 [API](#api-reference) · [Testing](#testing) · [Features by requirement](#features-by-requirement) ·
 [Trade-offs](#assumptions-shortcuts-and-trade-offs) · [Bugs found by testing](#bugs-found-by-testing)
+
+---
+
+## Demo
+
+> **Video walkthrough** — _link will be added before submission_
+
+What the demo covers:
+
+- Scheduling a campaign from the frontend
+- Dashboard: Scheduled → Sent transition (live-updating every 5 s)
+- Restart scenario: kill API + worker → restart → pending emails still send
+- (Bonus) Rate-limiting under load — Bull Board showing delayed jobs stacking up
 
 ---
 
