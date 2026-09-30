@@ -1,9 +1,14 @@
 #!/usr/bin/env node
 /**
  * load-test.mjs — schedules 1 000 emails via the live API to demonstrate:
- *   1. Emails rolling into the next hour window (hourly limit exceeded).
- *   2. The Slack alert firing when the limit is hit.
- *   3. Two worker replicas sharing the load while the per-sender limit holds.
+ *   1. The campaign's hourly limit spreading sends across later hours (nothing dropped).
+ *   2. Two worker replicas sharing the load while the per-sender limit holds.
+ *   3. The Slack alert, when run so the *per-sender* limit is exceeded (see below).
+ *
+ * The campaign limit is applied when the campaign is planned, so a single run never trips the
+ * runtime per-sender limit and never alerts. To see the alert, start the server with a low
+ * MAX_EMAILS_PER_HOUR_PER_SENDER (e.g. 2) and run this script twice in a row: the second
+ * campaign shares the senders and exceeds their limit.
  *
  * Usage:
  *   node scripts/load-test.mjs \
@@ -20,8 +25,8 @@
  * What to watch:
  *   - Dashboard "Scheduled" tab — emails appear immediately.
  *   - Bull Board /admin/queues   — jobs in "delayed" state.
- *   - After ~10 sends, Slack fires "Hourly limit hit for sender …".
- *   - Jobs for the overflow batch show scheduled_at in the next hour.
+ *   - Emails beyond the limit show scheduled_at an hour after the email `limit` places back.
+ *   - Second run with a low per-sender limit: Slack posts "Hourly limit hit for sender …".
  *   - With --scale worker=2, both workers share jobs; 0 duplicates in DB.
  */
 
@@ -29,22 +34,22 @@ import { parseArgs } from "node:util";
 
 const { values: args } = parseArgs({
   options: {
-    api:          { type: "string",  default: "http://localhost:4000" },
-    cookie:       { type: "string",  default: "" },
-    count:        { type: "string",  default: "1000" },
-    delay:        { type: "string",  default: "2000" },
+    api: { type: "string", default: "http://localhost:4000" },
+    cookie: { type: "string", default: "" },
+    count: { type: "string", default: "1000" },
+    delay: { type: "string", default: "2000" },
     "hourly-limit": { type: "string", default: "10" },
-    "start-mins": { type: "string",  default: "2" },
+    "start-mins": { type: "string", default: "2" },
   },
   strict: false,
 });
 
-const API          = args.api.replace(/\/$/, "");
-const COOKIE       = args.cookie;
-const COUNT        = parseInt(args.count, 10);
-const DELAY_MS     = parseInt(args.delay, 10);
+const API = args.api.replace(/\/$/, "");
+const COOKIE = args.cookie;
+const COUNT = parseInt(args.count, 10);
+const DELAY_MS = parseInt(args.delay, 10);
 const HOURLY_LIMIT = parseInt(args["hourly-limit"], 10);
-const START_MINS   = parseInt(args["start-mins"], 10);
+const START_MINS = parseInt(args["start-mins"], 10);
 
 // ── Build recipient list ──────────────────────────────────────────────────────
 // Uses numbered aliases so every address is unique but no real mailbox needed.
@@ -107,8 +112,10 @@ console.log(`   firstSendAt         : ${data.firstSendAt}`);
 console.log(`   lastSendAt          : ${data.lastSendAt}`);
 
 const first = new Date(data.firstSendAt);
-const last  = new Date(data.lastSendAt);
+const last = new Date(data.lastSendAt);
 const spanH = ((last - first) / 3_600_000).toFixed(1);
 console.log(`\n   ⏱  Span: ~${spanH} hours`);
-console.log(`\nWatch the dashboard → Scheduled tab, and check Bull Board at ${API}/admin/queues`);
+console.log(
+  `\nWatch the dashboard → Scheduled tab, and check Bull Board at ${API}/admin/queues`,
+);
 console.log("Slack alert should fire when the first hourly window fills up.\n");

@@ -1,8 +1,16 @@
 # ReachInbox Email Job Scheduler
 
+[![CI](https://github.com/Purvee25/outbox-email-scheduler/actions/workflows/ci.yml/badge.svg)](https://github.com/Purvee25/outbox-email-scheduler/actions/workflows/ci.yml)
+
 A full-stack email scheduling system built to the ReachInbox take-home spec.
 Schedule campaigns of up to 5 000 recipients, enforce per-sender hourly limits,
 survive restarts with zero duplicates, and search every email via Elasticsearch.
+
+**Contents:** [Architecture](#architecture) · [Local development](#local-development) ·
+[Scheduling algorithm](#scheduling-algorithm) · [Worker flow](#worker-flow-per-job) ·
+[Restart & recovery](#restart--recovery) · [Behaviour under load](#behaviour-under-load) ·
+[API](#api-reference) · [Testing](#testing) · [Features by requirement](#features-by-requirement) ·
+[Trade-offs](#assumptions-shortcuts-and-trade-offs) · [Bugs found by testing](#bugs-found-by-testing)
 
 ---
 
@@ -51,6 +59,7 @@ flowchart TD
 
 ```
 outbox-email-scheduler/
+├── .github/workflows/ci.yml  Typecheck, lint, tests, build and Docker images on every push
 ├── packages/shared/          Zod schemas + TypeScript types (API ↔ frontend)
 ├── backend/
 │   ├── src/
@@ -92,7 +101,7 @@ outbox-email-scheduler/
 ### 2 · Clone & install
 
 ```bash
-git clone https://github.com/<you>/outbox-email-scheduler
+git clone https://github.com/Purvee25/outbox-email-scheduler
 cd outbox-email-scheduler
 npm install          # installs all workspaces
 ```
@@ -158,7 +167,7 @@ Quick summary:
 
 ```bash
 # On the VM
-git clone https://github.com/<you>/outbox-email-scheduler
+git clone https://github.com/Purvee25/outbox-email-scheduler
 cd outbox-email-scheduler
 cp .env.example .env.production   # fill every value
 # Edit Caddyfile — replace YOUR_DOMAIN with your DuckDNS subdomain
@@ -301,7 +310,9 @@ Index on `(user_id, status, scheduled_at)` keeps paginated list queries fast.
 - Bull Board behind `requireAuth` + `ADMIN_EMAILS` allowlist.
 - `helmet`, `CORS` to one origin with credentials, `Origin` check on mutations,
   1 MB body limit, auth and compose rate limits (Redis-backed).
-- Email bodies rendered as plain text; previews never use `dangerouslySetInnerHTML`.
+- Email bodies are rich-text HTML sanitised on the server (allow-list of tags, http/https/mailto
+  links only) on write _and_ read; list previews are plain text.
+- Docker images never contain `.env` files (`.dockerignore`) and run as the non-root `node` user.
 - Session cookie: `httpOnly`, `secure` in production, `SameSite=Lax`.
 
 ---
@@ -317,8 +328,34 @@ node scripts/load-test.mjs \
   --delay        2000
 ```
 
-Produces immediate dashboard feedback, a Slack alert after ~10 sends, and
-demonstrates sends being held back by the rolling hourly limit.
+Emails appear in the dashboard immediately and sends beyond the campaign limit are spread
+across later hours. The campaign limit is applied at planning time, so one run never trips the
+runtime **per-sender** limit. To see the Slack alert, start the API and worker with
+`MAX_EMAILS_PER_HOUR_PER_SENDER=2` and schedule two campaigns back to back: the second one
+shares the senders, exceeds their limit, is held (not dropped) and posts the alert.
+
+---
+
+## Testing
+
+```bash
+docker compose up -d     # tests run against real MySQL, Redis and Elasticsearch
+npm test                 # backend (Vitest + Supertest) and frontend (Vitest + Testing Library)
+```
+
+**94 tests** (74 backend, 20 frontend), run on every push by [GitHub Actions](.github/workflows/ci.yml)
+together with typecheck, lint, the production frontend build and all three Docker images.
+
+| Area          | What is covered                                                                                                                        |
+| ------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| Rate limiting | Min gap, rolling hourly cap (incl. no reset at `:00`), 50 concurrent reservations, per-sender keys                                     |
+| Planner       | Delay spacing, sender rotation, rolling window for 100-email campaigns, monotonic order                                                |
+| Idempotency   | Exactly one of many concurrent workers claims an email; only the lease holder can finish it; expired leases fail instead of re-sending |
+| Email actions | Star, archive, delete (cancels scheduled, `409` while sending), 404 for other users' emails                                            |
+| Security      | Login required, Bull Board admin-only, per-user isolation, validation errors, login rate limit, AES-GCM tamper detection               |
+| Slack         | OAuth with CSRF state, encrypted webhook, no-op when not connected, drops revoked webhooks, retries transient errors                   |
+| Search        | Elasticsearch prefix/subject search, tab + status filters, no cross-user results                                                       |
+| Frontend      | Loading, empty and error states, compose validation, CSV lead counting, Slack connect/test/disconnect                                  |
 
 ---
 
@@ -327,7 +364,7 @@ demonstrates sends being held back by the rolling hourly limit.
 | Setting                     | Env var                          | Default                             | Meaning                                                                                                                                                           |
 | --------------------------- | -------------------------------- | ----------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Minimum delay between sends | `MIN_DELAY_MS`                   | **2000** (min 2 seconds per sender) | Floor for the gap between two sends from the same sender. A campaign can ask for a longer delay, never a shorter one.                                             |
-| Emails per hour             | `MAX_EMAILS_PER_HOUR_PER_SENDER` | **200** per sender                  | Cap per sender over any rolling 60 minutes. A campaign can lower it, never raise it.                                                                                          |
+| Emails per hour             | `MAX_EMAILS_PER_HOUR_PER_SENDER` | **200** per sender                  | Cap per sender over any rolling 60 minutes. A campaign can lower it, never raise it.                                                                              |
 | Worker concurrency          | `WORKER_CONCURRENCY`             | **5**                               | Jobs one worker process runs in parallel. Safe because every claim is an atomic `UPDATE … WHERE status='scheduled'` and slots are reserved by a Redis Lua script. |
 
 ## Features by requirement
@@ -367,3 +404,19 @@ demonstrates sends being held back by the rolling hourly limit.
 - **One sender identity per email.** The "From" shown in the UI is the signed-in user; the actual SMTP sender is one of the configured Ethereal accounts.
 - **No reschedule and no `{{name}}` personalisation.** Out of scope for the time box.
 - **Ethereal is a fake SMTP.** Nothing is delivered to real inboxes; each send stores a preview URL instead.
+- **Every worker must share the same limits.** The per-sender limit lives in Redis and is safe across any number of workers, but each worker reads `MAX_EMAILS_PER_HOUR_PER_SENDER` from its own environment. Deploy workers from one config (as `docker-compose.prod.yml` does).
+
+---
+
+## Bugs found by testing
+
+Issues found by the automated tests or by running the app end to end, and how each was fixed.
+
+| Found by                       | Problem                                                                                                                                           | Fix                                                                                                                                        |
+| ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| Review of the rate limiter     | A clock-hour counter let up to 2× the limit through around `:00` (end of one hour + start of the next).                                           | Rolling window in both the planner and the Lua script; regression test "does not reset the limit at the top of the hour".                  |
+| Email-action tests             | Archiving a **scheduled** email hid it from every tab while it still sent in the background.                                                      | The Archived tab lists every status, so it stays visible with its status badge.                                                            |
+| Email-action tests             | Deleting an email **mid-send** returned success while the SMTP call still went out.                                                               | Delete refuses `sending` rows with `409`; deleting a scheduled row is proven to stop the send.                                             |
+| Live demo (2 senders, limit 2) | One sender sent 3 emails in an hour. Cause: a leftover worker from an earlier run, started with a different `.env`, was consuming the same queue. | Not a code bug — the shared Redis limiter behaved correctly for each worker's config. Documented above: all workers must share one config. |
+| Full test run                  | A sign-in test got `429` when a dev server was also running, because the login rate limiter counts in shared Redis.                               | Tests reset the limiter's keys and use fake OAuth credentials, so they never depend on a developer's machine.                              |
+| Production build review        | Docker images would have contained `backend/.env` (OAuth, SMTP and Slack secrets); the frontend image referenced a missing `public/` folder.      | Added `.dockerignore`, non-root users and health checks; images are built in CI on every push.                                             |
