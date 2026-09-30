@@ -18,8 +18,19 @@ beforeEach(() => {
 });
 
 afterAll(async () => {
-  const keys = await redis.keys("test:*");
-  if (keys.length > 0) await redis.del(...keys);
+  // SCAN instead of KEYS to avoid O(N) full-keyspace block on large Redis instances.
+  let cursor = "0";
+  do {
+    const [next, keys] = await redis.scan(
+      cursor,
+      "MATCH",
+      "test:*",
+      "COUNT",
+      100,
+    );
+    if (keys.length > 0) await redis.del(...keys);
+    cursor = next;
+  } while (cursor !== "0");
   await redis.quit();
 });
 
@@ -68,6 +79,18 @@ describe("reserveSendSlot", () => {
     const b = await reserveSendSlot(redis, "b@x.test", limits, NOW, prefix);
 
     expect([a.sendAt, b.sendAt]).toEqual([NOW, NOW]);
+  });
+
+  it("enforces hourlyLimit=1: every slot is >= 1 hour after the previous", async () => {
+    const limits = { minDelayMs: 0, maxPerHour: 1 };
+    const first = await reserveSendSlot(redis, SENDER, limits, NOW, prefix);
+    const second = await reserveSendSlot(redis, SENDER, limits, NOW, prefix);
+    const third = await reserveSendSlot(redis, SENDER, limits, NOW, prefix);
+
+    expect(second.hourlyLimitHit).toBe(true);
+    expect(third.hourlyLimitHit).toBe(true);
+    expect(second.sendAt - first.sendAt).toBeGreaterThanOrEqual(HOUR_MS);
+    expect(third.sendAt - second.sendAt).toBeGreaterThanOrEqual(HOUR_MS);
   });
 
   it("never puts more than the limit in any 60-minute span under concurrent reservations", async () => {

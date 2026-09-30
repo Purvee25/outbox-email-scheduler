@@ -131,6 +131,8 @@ googleAuthRouter.get("/google/callback", async (req, res) => {
   }
 });
 
+export const SESSION_COOKIE_NAME = "sid";
+
 googleAuthRouter.post("/logout", (req, res, next) => {
   req.session.destroy((error) => {
     if (error) {
@@ -140,5 +142,3 @@ googleAuthRouter.post("/logout", (req, res, next) => {
     res.clearCookie(SESSION_COOKIE_NAME).status(204).end();
   });
 });
-
-export const SESSION_COOKIE_NAME = "sid";

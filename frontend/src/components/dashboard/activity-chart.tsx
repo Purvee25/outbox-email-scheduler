@@ -17,7 +17,7 @@ function dayLabel(iso: string) {
   });
 }
 
-export function ActivityChart({ sidebar = false }: { sidebar?: boolean }) {
+export function ActivityChart() {
   const { data } = useQuery({
     queryKey: queryKeys.emailActivity,
     queryFn: api.getEmailActivity,

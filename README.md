@@ -318,9 +318,12 @@ Index on `(user_id, status, scheduled_at)` keeps paginated list queries fast.
 | GET    | `/api/me`                       | ✓       | Current user + Slack status                                |
 | POST   | `/api/campaigns`                | ✓       | Schedule a campaign                                        |
 | GET    | `/api/emails?tab&page&q&status` | ✓       | List/search emails                                         |
+| GET    | `/api/emails/stats`             | ✓       | Counts by status (scheduled/sending/sent/failed)           |
+| GET    | `/api/emails/activity`          | ✓       | Daily sent/failed totals for the last 7 days               |
 | GET    | `/api/emails/:id`               | ✓       | Email detail (owner only)                                  |
 | PUT    | `/api/emails/:id/star`          | ✓       | Star / unstar                                              |
 | PUT    | `/api/emails/:id/archive`       | ✓       | Archive / unarchive                                        |
+| POST   | `/api/emails/:id/retry`         | ✓       | Reset a failed email to scheduled and re-enqueue           |
 | DELETE | `/api/emails/:id`               | ✓       | Delete; cancels it if still scheduled, `409` while sending |
 | GET    | `/api/slack/connect`            | ✓       | Start Slack OAuth                                          |
 | GET    | `/api/slack/callback`           | ✓       | Slack OAuth callback                                       |

@@ -101,6 +101,31 @@ describe("planSends", () => {
       }),
     ).toThrow();
   });
+
+  it("returns an empty array for zero recipients", () => {
+    expect(
+      planSends([], {
+        startAt: atHour(0),
+        delayMs: 1000,
+        hourlyLimit: 10,
+        senders: SENDERS,
+      }),
+    ).toEqual([]);
+  });
+
+  it("spaces every send >= 1 hour apart when hourlyLimit is 1", () => {
+    const result = planSends(recipients(3), {
+      startAt: atHour(0),
+      delayMs: 0,
+      hourlyLimit: 1,
+      senders: SENDERS,
+    });
+    for (let i = 1; i < result.length; i++) {
+      const gap =
+        result[i].scheduledAt.getTime() - result[i - 1].scheduledAt.getTime();
+      expect(gap).toBeGreaterThanOrEqual(HOUR_MS);
+    }
+  });
 });
 
 describe("normalizeRecipients", () => {
