@@ -615,12 +615,12 @@ export function ComposeView({
               {/* Divider */}
               <span className="mx-4 text-[13px] text-ink-muted">or</span>
 
-              {/* Custom date+time — single pill */}
-              <label
-                className={`flex h-10 cursor-pointer items-center gap-2 rounded-control border px-4 text-[13px] font-medium transition-colors ${
+              {/* Custom date+time — visible datetime input */}
+              <div
+                className={`flex h-10 items-center gap-2 rounded-control border px-3 text-[13px] font-medium transition-colors ${
                   sendMode === "custom"
-                    ? "border-brand-600 bg-mint text-brand-600"
-                    : "border-border text-ink-muted hover:bg-field"
+                    ? "border-brand-600 bg-mint"
+                    : "border-border bg-white"
                 }`}
               >
                 <svg
@@ -630,31 +630,23 @@ export function ComposeView({
                   strokeWidth="1.5"
                   strokeLinecap="round"
                   strokeLinejoin="round"
-                  className="size-4 shrink-0"
+                  className={`size-4 shrink-0 ${sendMode === "custom" ? "text-brand-600" : "text-ink-muted"}`}
                   aria-hidden
                 >
                   <rect x="2.5" y="3.5" width="15" height="14" rx="2" />
                   <path d="M2.5 8h15M7 1.5v4M13 1.5v4" />
                 </svg>
-                {sendMode === "custom" && scheduledAt
-                  ? new Date(scheduledAt).toLocaleString(undefined, {
-                      month: "short",
-                      day: "numeric",
-                      hour: "numeric",
-                      minute: "2-digit",
-                    })
-                  : "Pick date & time"}
                 <input
-                  id="send-at-custom"
                   type="datetime-local"
                   value={sendMode === "custom" ? scheduledAt : ""}
                   onChange={(e) => {
                     setSendMode("custom");
                     setScheduledAt(e.target.value);
                   }}
-                  className="sr-only"
+                  onClick={() => setSendMode("custom")}
+                  className={`bg-transparent text-[13px] focus:outline-none ${sendMode === "custom" ? "text-brand-600" : "text-ink-muted"}`}
                 />
-              </label>
+              </div>
 
               {/* Clear */}
               {scheduledAt && (
