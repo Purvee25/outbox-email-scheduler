@@ -527,8 +527,8 @@ export function ComposeView({
                   onClick={() => {
                     const next = Math.max(0, sendAmount - 1);
                     setSendAmount(next);
-                    if (sendMode === "offset")
-                      setScheduledAt(offsetNow(next, sendUnit));
+                    setSendMode("offset");
+                    setScheduledAt(offsetNow(next, sendUnit));
                   }}
                   className="flex h-10 w-10 items-center justify-center text-xl font-light text-ink-muted hover:bg-field hover:text-ink active:bg-mint"
                 >
@@ -544,14 +544,14 @@ export function ComposeView({
                       e.preventDefault();
                       const next = Math.min(sendAmount + 1, UNIT_MAX[sendUnit]);
                       setSendAmount(next);
-                      if (sendMode === "offset")
-                        setScheduledAt(offsetNow(next, sendUnit));
+                      setSendMode("offset");
+                      setScheduledAt(offsetNow(next, sendUnit));
                     } else if (e.key === "ArrowDown") {
                       e.preventDefault();
                       const next = Math.max(0, sendAmount - 1);
                       setSendAmount(next);
-                      if (sendMode === "offset")
-                        setScheduledAt(offsetNow(next, sendUnit));
+                      setSendMode("offset");
+                      setScheduledAt(offsetNow(next, sendUnit));
                     }
                   }}
                   onChange={(e) => {
@@ -560,8 +560,8 @@ export function ComposeView({
                       Math.min(Number(e.target.value) || 0, UNIT_MAX[sendUnit]),
                     );
                     setSendAmount(v);
-                    if (sendMode === "offset")
-                      setScheduledAt(offsetNow(v, sendUnit));
+                    setSendMode("offset");
+                    setScheduledAt(offsetNow(v, sendUnit));
                   }}
                   onWheel={(e) => {
                     e.preventDefault();
@@ -571,8 +571,8 @@ export function ComposeView({
                       Math.min(sendAmount + delta, UNIT_MAX[sendUnit]),
                     );
                     setSendAmount(next);
-                    if (sendMode === "offset")
-                      setScheduledAt(offsetNow(next, sendUnit));
+                    setSendMode("offset");
+                    setScheduledAt(offsetNow(next, sendUnit));
                   }}
                   className="h-10 w-14 border-x border-border bg-white text-center text-[15px] font-semibold tabular-nums focus:outline-none focus:ring-0"
                 />
@@ -582,8 +582,8 @@ export function ComposeView({
                   onClick={() => {
                     const next = Math.min(sendAmount + 1, UNIT_MAX[sendUnit]);
                     setSendAmount(next);
-                    if (sendMode === "offset")
-                      setScheduledAt(offsetNow(next, sendUnit));
+                    setSendMode("offset");
+                    setScheduledAt(offsetNow(next, sendUnit));
                   }}
                   className="flex h-10 w-10 items-center justify-center text-xl font-light text-ink-muted hover:bg-field hover:text-ink active:bg-mint"
                 >
