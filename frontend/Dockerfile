@@ -22,11 +22,15 @@ RUN npm run build -w frontend
 FROM node:22-alpine AS runner
 WORKDIR /app
 ENV NODE_ENV=production
+# Docker sets HOSTNAME to the container id; the standalone server must bind all interfaces.
+ENV HOSTNAME=0.0.0.0
+ENV PORT=3000
 
 COPY --from=builder /app/frontend/.next/standalone ./
 COPY --from=builder /app/frontend/.next/static ./frontend/.next/static
-COPY --from=builder /app/frontend/public ./frontend/public
+USER node
 
 EXPOSE 3000
-ENV PORT=3000
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
+  CMD wget -qO /dev/null http://127.0.0.1:3000/login || exit 1
 CMD ["node", "frontend/server.js"]

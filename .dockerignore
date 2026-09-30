@@ -1,0 +1,23 @@
+# Secrets never enter the build context (images must get config from the environment).
+**/.env
+**/.env.*
+!**/.env.example
+
+# Reinstalled / rebuilt inside the image
+**/node_modules
+**/.next
+**/dist
+**/coverage
+
+# Not needed at runtime
+.git
+.github
+**/*.log
+**/.DS_Store
+**/test
+docs
+scripts
+HANDOFF.md
+PLAN.md
+**/AGENTS.md
+**/CLAUDE.md
