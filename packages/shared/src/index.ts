@@ -27,12 +27,33 @@ export const MAX_RECIPIENTS_PER_CAMPAIGN = 5000;
 export const MAX_DELAY_BETWEEN_EMAILS_MS = 60 * 60 * 1000;
 
 export const createCampaignSchema = z.object({
-  subject: z.string().trim().min(1).max(998),
-  body: z.string().trim().min(1).max(100_000),
-  recipients: z.array(z.email()).min(1).max(MAX_RECIPIENTS_PER_CAMPAIGN),
-  startAt: z.iso.datetime({ offset: true }),
-  delayMs: z.number().int().min(0).max(MAX_DELAY_BETWEEN_EMAILS_MS),
-  hourlyLimit: z.number().int().min(1),
+  subject: z
+    .string()
+    .trim()
+    .min(1, "Subject is required")
+    .max(998, "Subject is too long"),
+  body: z
+    .string()
+    .trim()
+    .min(1, "Body is required")
+    .max(100_000, "Body is too long"),
+  recipients: z
+    .array(z.email("Invalid email address"))
+    .min(1, "Add at least one recipient")
+    .max(
+      MAX_RECIPIENTS_PER_CAMPAIGN,
+      `At most ${MAX_RECIPIENTS_PER_CAMPAIGN} recipients per campaign`,
+    ),
+  startAt: z.iso.datetime({ offset: true, error: "Choose a valid start time" }),
+  delayMs: z
+    .number({ error: "Enter a delay in seconds" })
+    .int("Delay must be a whole number of seconds")
+    .min(0, "Delay can't be negative")
+    .max(MAX_DELAY_BETWEEN_EMAILS_MS, "Delay can be at most 1 hour"),
+  hourlyLimit: z
+    .number({ error: "Enter an hourly limit" })
+    .int("Hourly limit must be a whole number")
+    .min(1, "Hourly limit must be at least 1"),
 });
 export type CreateCampaignInput = z.infer<typeof createCampaignSchema>;
 
