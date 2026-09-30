@@ -7,3 +7,9 @@ dist/
 *.log
 .DS_Store
 coverage/
+
+# Local working notes and AI-tool config (not part of the project)
+HANDOFF.md
+PLAN.md
+AGENTS.md
+CLAUDE.md
