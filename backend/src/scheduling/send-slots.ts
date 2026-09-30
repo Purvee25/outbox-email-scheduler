@@ -117,3 +117,17 @@ export async function reserveSendSlot(
   )) as [number, number];
   return { sendAt, hourlyLimitHit: limitHit === 1 };
 }
+
+/**
+ * Removes one entry for `sendAtMs` from the sender's reservation log so the slot
+ * can be reused. Called when a scheduled email is deleted before it sends.
+ */
+export async function releaseSlot(
+  redis: Redis,
+  sender: string,
+  sendAtMs: number,
+  keyPrefix = "rl",
+): Promise<void> {
+  const { sendLog } = slotKeys(sender, keyPrefix);
+  await redis.lrem(sendLog, 1, String(sendAtMs));
+}

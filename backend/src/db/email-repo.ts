@@ -286,25 +286,35 @@ export async function retryEmail(
   return result.affectedRows === 1;
 }
 
-export type DeleteEmailResult = "deleted" | "not_found" | "sending";
-
 /**
  * Hard-deletes an email the user owns. A `sending` row is refused: its SMTP call is already in
  * flight and can't be recalled. Deleting a `scheduled` row is enough to stop the send, because the
  * worker's claim (`UPDATE … WHERE status='scheduled'`) then matches nothing.
  */
+export type DeleteEmailResult =
+  | { outcome: "deleted"; sender: string; scheduledAt: Date }
+  | { outcome: "sending" }
+  | { outcome: "not_found" };
+
 export async function deleteEmailRow(
   userId: string,
   emailId: string,
 ): Promise<DeleteEmailResult> {
   const owned = and(eq(emails.id, emailId), eq(emails.userId, userId));
-  const [result] = await db
-    .delete(emails)
-    .where(and(owned, ne(emails.status, "sending")));
-  if (result.affectedRows === 1) return "deleted";
-  const [existing] = await db
-    .select({ id: emails.id })
+  const [row] = await db
+    .select({
+      sender: emails.sender,
+      scheduledAt: emails.scheduledAt,
+      status: emails.status,
+    })
     .from(emails)
     .where(owned);
-  return existing ? "sending" : "not_found";
+  if (!row) return { outcome: "not_found" };
+  if (row.status === "sending") return { outcome: "sending" };
+  await db.delete(emails).where(owned);
+  return {
+    outcome: "deleted",
+    sender: row.sender,
+    scheduledAt: row.scheduledAt,
+  };
 }

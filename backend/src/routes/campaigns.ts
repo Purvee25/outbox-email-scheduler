@@ -16,6 +16,8 @@ import {
 } from "../db/email-repo.js";
 import { emailQueue, emailJobId } from "../queue/queues.js";
 import { requestIndexingSafely } from "../queue/search-index.js";
+import { redis } from "../lib/redis.js";
+import { releaseSlot } from "../scheduling/send-slots.js";
 
 export const campaignsRouter = Router();
 
@@ -77,13 +79,16 @@ emailsRouter.post("/:id/retry", async (req, res) => {
 emailsRouter.delete("/:id", async (req, res) => {
   const id = parseOrThrow(z.uuid(), req.params.id);
   const result = await deleteEmailRow(currentUserId(req), id);
-  if (result === "not_found") throw new HttpError(404, "Email not found");
-  if (result === "sending") {
+  if (result.outcome === "not_found")
+    throw new HttpError(404, "Email not found");
+  if (result.outcome === "sending") {
     throw new HttpError(
       409,
       "This email is being sent right now and can't be deleted",
     );
   }
+  // Release the Redis rate-limit slot so the window opens up for the next campaign.
+  await releaseSlot(redis, result.sender, result.scheduledAt.getTime());
   // Tidies the queue; the missing row alone already guarantees the job won't send.
   await emailQueue.remove(emailJobId(id));
   requestIndexingSafely([id]);
