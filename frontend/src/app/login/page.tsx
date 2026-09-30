@@ -18,8 +18,14 @@ export default async function LoginPage({ searchParams }: PageProps<"/login">) {
   return (
     <main className="flex min-h-screen items-center justify-center px-4">
       <div className="animate-fade-up w-full max-w-[26rem] rounded-card border border-border px-8 py-12">
-        <h1 className="mb-8 text-center text-4xl font-semibold tracking-tight">
-          Login
+        <p className="mb-1 text-center font-mono text-4xl font-black tracking-tighter">
+          Outbox
+        </p>
+        <p className="mb-8 text-center text-sm text-ink-muted">
+          Email scheduling, delivered.
+        </p>
+        <h1 className="mb-6 text-center text-2xl font-semibold tracking-tight">
+          Sign in to your account
         </h1>
 
         {errorMessage && (
