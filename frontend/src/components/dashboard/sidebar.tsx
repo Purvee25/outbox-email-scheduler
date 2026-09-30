@@ -151,8 +151,12 @@ export function Sidebar({
             />
           </svg>
         </summary>
-        <div className="flex flex-col gap-2 border-t border-border p-3">
+        <div className="flex flex-col border-t border-border p-3">
+          <p className="mb-2 px-1 text-[11px] font-semibold uppercase tracking-wider text-ink-muted">
+            Integrations
+          </p>
           <SlackControl connected={slackConnected} />
+          <div className="my-2 border-t border-border" />
           <Button
             variant="ghost"
             size="sm"
