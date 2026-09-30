@@ -32,18 +32,18 @@ flowchart TD
 
 ### Key design decisions
 
-| Decision | Why |
-|----------|-----|
-| **MySQL as source of truth** | Atomic `UPDATE … WHERE status='scheduled'` gives cheap idempotent claiming without a distributed lock library. |
-| **Redis AOF + BullMQ** | Jobs survive restarts. On boot the worker reconciles every `scheduled` row that lacks a Redis job — so even a full Redis wipe doesn't lose work. |
-| **Lua-script slot reservation** | One atomic `EVALSHA` per job hands out the next free send-slot and enforces the hourly cap. No polling, no thundering herd. |
-| **`moveToDelayed` instead of sleep** | The worker never blocks a thread. If a slot is in the future it moves the job back to BullMQ's delayed set and exits the processor. |
-| **At-most-once on expired leases** | Ethereal has no idempotency key. An expired `sending` row is marked `failed` rather than retried — we prefer missing one send to duplicating it. |
-| **Fixed-window hourly counter** | Simple and fast. Known trade-off: up to 2× the limit can fire around an hour boundary. Documented. |
-| **Separate notification queue** | A slow or erroring Slack call never blocks email sending. |
-| **Elasticsearch for search** | MySQL `LIKE` on millions of rows is slow. ES failure only delays search results — email sending continues unaffected. |
-| **Session cookie, not JWT** | Real logout/revocation. `httpOnly` + `SameSite=Lax` + `secure` in production. |
-| **Google OAuth as the only login** | Spec requirement; no password storage. |
+| Decision                             | Why                                                                                                                                              |
+| ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **MySQL as source of truth**         | Atomic `UPDATE … WHERE status='scheduled'` gives cheap idempotent claiming without a distributed lock library.                                   |
+| **Redis AOF + BullMQ**               | Jobs survive restarts. On boot the worker reconciles every `scheduled` row that lacks a Redis job — so even a full Redis wipe doesn't lose work. |
+| **Lua-script slot reservation**      | One atomic `EVALSHA` per job hands out the next free send-slot and enforces the hourly cap. No polling, no thundering herd.                      |
+| **`moveToDelayed` instead of sleep** | The worker never blocks a thread. If a slot is in the future it moves the job back to BullMQ's delayed set and exits the processor.              |
+| **At-most-once on expired leases**   | Ethereal has no idempotency key. An expired `sending` row is marked `failed` rather than retried — we prefer missing one send to duplicating it. |
+| **Fixed-window hourly counter**      | Simple and fast. Known trade-off: up to 2× the limit can fire around an hour boundary. Documented.                                               |
+| **Separate notification queue**      | A slow or erroring Slack call never blocks email sending.                                                                                        |
+| **Elasticsearch for search**         | MySQL `LIKE` on millions of rows is slow. ES failure only delays search results — email sending continues unaffected.                            |
+| **Session cookie, not JWT**          | Real logout/revocation. `httpOnly` + `SameSite=Lax` + `secure` in production.                                                                    |
+| **Google OAuth as the only login**   | Spec requirement; no password storage.                                                                                                           |
 
 ---
 
@@ -145,6 +145,7 @@ Bull Board: `http://localhost:4000/admin/queues`
 See [`docs/railway.md`](docs/railway.md) for the full step-by-step.
 
 Quick summary:
+
 1. Add MySQL, Redis, Elasticsearch add-ons in Railway.
 2. Create three Railway services (API, worker, frontend) pointing at this repo.
 3. Set all env vars (copy from `.env.example`).
@@ -255,32 +256,32 @@ Index on `(user_id, status, scheduled_at)` keeps paginated list queries fast.
 
 **Verified scenarios (automated tests + manual):**
 
-| Scenario | Result |
-|----------|--------|
-| 6 emails, 1 s apart | All sent 40–120 ms after scheduled time, 1 attempt each |
-| Worker killed, restarted before due | All sent once |
-| Full Redis wipe while worker down | Worker rebuilt from MySQL on boot, all sent on time |
-| Hourly limit 7/sender, 9 emails at once | 5 sent in first window, 4 rolled to next hour |
-| 30 emails at once | Per-sender gap 2 006–2 009 ms |
-| All runs combined | 55 sent, 0 duplicates, max attempts 1 |
+| Scenario                                | Result                                                  |
+| --------------------------------------- | ------------------------------------------------------- |
+| 6 emails, 1 s apart                     | All sent 40–120 ms after scheduled time, 1 attempt each |
+| Worker killed, restarted before due     | All sent once                                           |
+| Full Redis wipe while worker down       | Worker rebuilt from MySQL on boot, all sent on time     |
+| Hourly limit 7/sender, 9 emails at once | 5 sent in first window, 4 rolled to next hour           |
+| 30 emails at once                       | Per-sender gap 2 006–2 009 ms                           |
+| All runs combined                       | 55 sent, 0 duplicates, max attempts 1                   |
 
 ---
 
 ## API reference
 
-| Method | Path | Auth | Description |
-|--------|------|------|-------------|
-| GET | `/health` | — | MySQL + Redis liveness |
-| GET | `/auth/google` | — | Start Google OAuth flow |
-| GET | `/auth/google/callback` | — | OAuth callback |
-| POST | `/auth/logout` | ✓ | Invalidate session |
-| GET | `/api/me` | ✓ | Current user + Slack status |
-| POST | `/api/campaigns` | ✓ | Schedule a campaign |
-| GET | `/api/emails?tab&page&q&status` | ✓ | List/search emails |
-| GET | `/api/slack/connect` | ✓ | Start Slack OAuth |
-| GET | `/api/slack/callback` | ✓ | Slack OAuth callback |
-| DELETE | `/api/slack` | ✓ | Disconnect Slack |
-| GET | `/admin/queues` | ✓ admin | Bull Board |
+| Method | Path                            | Auth    | Description                 |
+| ------ | ------------------------------- | ------- | --------------------------- |
+| GET    | `/health`                       | —       | MySQL + Redis liveness      |
+| GET    | `/auth/google`                  | —       | Start Google OAuth flow     |
+| GET    | `/auth/google/callback`         | —       | OAuth callback              |
+| POST   | `/auth/logout`                  | ✓       | Invalidate session          |
+| GET    | `/api/me`                       | ✓       | Current user + Slack status |
+| POST   | `/api/campaigns`                | ✓       | Schedule a campaign         |
+| GET    | `/api/emails?tab&page&q&status` | ✓       | List/search emails          |
+| GET    | `/api/slack/connect`            | ✓       | Start Slack OAuth           |
+| GET    | `/api/slack/callback`           | ✓       | Slack OAuth callback        |
+| DELETE | `/api/slack`                    | ✓       | Disconnect Slack            |
+| GET    | `/admin/queues`                 | ✓ admin | Bull Board                  |
 
 ---
 
@@ -313,46 +314,38 @@ demonstrates overflow into the next hour window.
 
 ---
 
-## Check your setup
-
-```bash
-npm run doctor
-```
-
-Reads `backend/.env` and the API `/health` endpoint and lists what is still missing for a real demo (Google login, Ethereal senders, `MAIL_TRANSPORT=ethereal`, Slack), with the exact console steps. It never prints secret values.
-
 ## Configuration defaults
 
-| Setting | Env var | Default | Meaning |
-|---|---|---|---|
-| Minimum delay between sends | `MIN_DELAY_MS` | **2000** (min 2 seconds per sender) | Floor for the gap between two sends from the same sender. A campaign can ask for a longer delay, never a shorter one. |
-| Emails per hour | `MAX_EMAILS_PER_HOUR_PER_SENDER` | **200** per sender | Cap per sender per hour window. A campaign can lower it, never raise it. |
-| Worker concurrency | `WORKER_CONCURRENCY` | **5** | Jobs one worker process runs in parallel. Safe because every claim is an atomic `UPDATE … WHERE status='scheduled'` and slots are reserved by a Redis Lua script. |
+| Setting                     | Env var                          | Default                             | Meaning                                                                                                                                                           |
+| --------------------------- | -------------------------------- | ----------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Minimum delay between sends | `MIN_DELAY_MS`                   | **2000** (min 2 seconds per sender) | Floor for the gap between two sends from the same sender. A campaign can ask for a longer delay, never a shorter one.                                             |
+| Emails per hour             | `MAX_EMAILS_PER_HOUR_PER_SENDER` | **200** per sender                  | Cap per sender per hour window. A campaign can lower it, never raise it.                                                                                          |
+| Worker concurrency          | `WORKER_CONCURRENCY`             | **5**                               | Jobs one worker process runs in parallel. Safe because every claim is an atomic `UPDATE … WHERE status='scheduled'` and slots are reserved by a Redis Lua script. |
 
 ## Features by requirement
 
 **Backend**
 
-| Requirement | Where |
-|---|---|
-| Scheduling API, relational storage | `POST /api/campaigns` → `services/campaigns.ts`, MySQL (Drizzle) |
-| BullMQ delayed jobs, no cron | `queue/queues.ts`, `worker.ts`; the lease sweep re-schedules itself as a delayed job |
-| Multiple Ethereal senders | `mail/senders.ts` (`ETHEREAL_SENDERS`), assigned round-robin |
+| Requirement                                | Where                                                                                                |
+| ------------------------------------------ | ---------------------------------------------------------------------------------------------------- |
+| Scheduling API, relational storage         | `POST /api/campaigns` → `services/campaigns.ts`, MySQL (Drizzle)                                     |
+| BullMQ delayed jobs, no cron               | `queue/queues.ts`, `worker.ts`; the lease sweep re-schedules itself as a delayed job                 |
+| Multiple Ethereal senders                  | `mail/senders.ts` (`ETHEREAL_SENDERS`), assigned round-robin                                         |
 | Persistence across restarts, no duplicates | MySQL is the source of truth; `reconcileScheduledEmails()` on boot; idempotent `jobId`; atomic claim |
-| Concurrency, min delay, hourly limit | See *Configuration defaults* and `scheduling/send-slots.ts` (Redis Lua) |
-| Slack alert on limit hit | `slack/`, `queue/notifications.ts`; no-op when Slack isn't connected |
-| Elasticsearch search | `search/`, `queue/search-index.ts`, `GET /api/emails?q=` |
-| BullMQ dashboard | Bull Board at `/admin/queues` (admins in `ADMIN_EMAILS`) |
+| Concurrency, min delay, hourly limit       | See _Configuration defaults_ and `scheduling/send-slots.ts` (Redis Lua)                              |
+| Slack alert on limit hit                   | `slack/`, `queue/notifications.ts`; no-op when Slack isn't connected                                 |
+| Elasticsearch search                       | `search/`, `queue/search-index.ts`, `GET /api/emails?q=`                                             |
+| BullMQ dashboard                           | Bull Board at `/admin/queues` (admins in `ADMIN_EMAILS`)                                             |
 
 **Frontend**
 
-| Requirement | Where |
-|---|---|
-| Google login, logout, user name/email/avatar | `app/login`, `dashboard/sidebar.tsx` |
-| Scheduled / Sent lists with loading, empty and error states | `dashboard/email-table.tsx` |
-| Compose with CSV/text upload, start time, delay, hourly limit | `dashboard/compose-view.tsx`, `lib/leads.ts` |
-| Email detail | `dashboard/email-detail.tsx`, `GET /api/emails/:id` |
-| Rich-text body, attachments | `ui/rich-text-editor.tsx`, `ui/attachment-card.tsx`, `backend/src/routes/attachments.ts`, `lib/html.ts` |
+| Requirement                                                   | Where                                                                                                   |
+| ------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| Google login, logout, user name/email/avatar                  | `app/login`, `dashboard/sidebar.tsx`                                                                    |
+| Scheduled / Sent lists with loading, empty and error states   | `dashboard/email-table.tsx`                                                                             |
+| Compose with CSV/text upload, start time, delay, hourly limit | `dashboard/compose-view.tsx`, `lib/leads.ts`                                                            |
+| Email detail                                                  | `dashboard/email-detail.tsx`, `GET /api/emails/:id`                                                     |
+| Rich-text body, attachments                                   | `ui/rich-text-editor.tsx`, `ui/attachment-card.tsx`, `backend/src/routes/attachments.ts`, `lib/html.ts` |
 
 ## Assumptions, shortcuts and trade-offs
 
@@ -365,34 +358,3 @@ Reads `backend/.env` and the API `/health` endpoint and lists what is still miss
 - **One sender identity per email.** The "From" shown in the UI is the signed-in user; the actual SMTP sender is one of the configured Ethereal accounts.
 - **No cancel/reschedule and no `{{name}}` personalisation.** Out of scope for the time box.
 - **Ethereal is a fake SMTP.** Nothing is delivered to real inboxes; each send stores a preview URL instead.
-
----
-
-## Demo script (video)
-
-1. Open the app. Log in with Google.
-2. Compose modal → paste a CSV of 20 recipients, subject "Demo", start 1 min from now,
-   delay 3 s, hourly limit 5. Submit.
-3. Dashboard "Scheduled" tab — 20 rows appear instantly.
-4. Wait. Watch rows flip to "Sent". Click a preview URL — Ethereal shows the email.
-5. Stop API + worker processes.
-6. Restart both. Future emails still send (Redis AOF). Past-due emails send immediately.
-7. Run load test: `node scripts/load-test.mjs --count 1000 --hourly-limit 10`.
-8. Bull Board → delayed tab fills up. After ~10 sends, Slack alert fires.
-9. Scale worker: `--scale worker=2` (or Railway replicas → 2).
-10. SQL check: `SELECT status, COUNT(*) FROM emails GROUP BY status` — no duplicates.
-
----
-
-## Things only you can do
-
-| Item | What's needed |
-|------|--------------|
-| Google OAuth credentials | Google Cloud Console → create OAuth client, set redirect URI to `https://<api>/auth/google/callback` |
-| Slack app | api.slack.com → new app → `incoming-webhook` scope → redirect URL `https://<api>/api/slack/callback` |
-| Ethereal accounts | [ethereal.email/create](https://ethereal.email/create) × 2–3, add to `ETHEREAL_SENDERS` |
-| `ADMIN_EMAILS` | Your email, comma-separated |
-| Figma styling | Share the Figma file (view access) or paste screenshots — colour/spacing tokens can be matched |
-| Reviewer invites | Invite to the GitHub repo (block 0 item) |
-| Video recording | Record the demo script above once the app is deployed |
-| GitHub push | Say "push" and I'll do it |
