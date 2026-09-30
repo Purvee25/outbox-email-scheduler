@@ -32,18 +32,18 @@ flowchart TD
 
 ### Key design decisions
 
-| Decision                             | Why                                                                                                                                              |
-| ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------ |
-| **MySQL as source of truth**         | Atomic `UPDATE … WHERE status='scheduled'` gives cheap idempotent claiming without a distributed lock library.                                   |
-| **Redis AOF + BullMQ**               | Jobs survive restarts. On boot the worker reconciles every `scheduled` row that lacks a Redis job — so even a full Redis wipe doesn't lose work. |
-| **Lua-script slot reservation**      | One atomic `EVALSHA` per job hands out the next free send-slot and enforces the hourly cap. No polling, no thundering herd.                      |
-| **`moveToDelayed` instead of sleep** | The worker never blocks a thread. If a slot is in the future it moves the job back to BullMQ's delayed set and exits the processor.              |
-| **At-most-once on expired leases**   | Ethereal has no idempotency key. An expired `sending` row is marked `failed` rather than retried — we prefer missing one send to duplicating it. |
-| **Fixed-window hourly counter**      | Simple and fast. Known trade-off: up to 2× the limit can fire around an hour boundary. Documented.                                               |
-| **Separate notification queue**      | A slow or erroring Slack call never blocks email sending.                                                                                        |
-| **Elasticsearch for search**         | MySQL `LIKE` on millions of rows is slow. ES failure only delays search results — email sending continues unaffected.                            |
-| **Session cookie, not JWT**          | Real logout/revocation. `httpOnly` + `SameSite=Lax` + `secure` in production.                                                                    |
-| **Google OAuth as the only login**   | Spec requirement; no password storage.                                                                                                           |
+| Decision                             | Why                                                                                                                                                                                                                                                                                  |
+| ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **MySQL as source of truth**         | Atomic `UPDATE … WHERE status='scheduled'` gives cheap idempotent claiming without a distributed lock library.                                                                                                                                                                       |
+| **Redis AOF + BullMQ**               | Jobs survive restarts. On boot the worker reconciles every `scheduled` row that lacks a Redis job — so even a full Redis wipe doesn't lose work.                                                                                                                                     |
+| **Lua-script slot reservation**      | One atomic `EVALSHA` per job hands out the next free send-slot and enforces the hourly cap. No polling, no thundering herd.                                                                                                                                                          |
+| **`moveToDelayed` instead of sleep** | The worker never blocks a thread. If a slot is in the future it moves the job back to BullMQ's delayed set and exits the processor.                                                                                                                                                  |
+| **At-most-once on expired leases**   | Ethereal has no idempotency key. An expired `sending` row is marked `failed` rather than retried — we prefer missing one send to duplicating it.                                                                                                                                     |
+| **Rolling-window hourly limit**      | Each sender's last N send times live in a Redis list; a send is never earlier than 1 h after the send N places back, so no 60-minute span exceeds the limit — no 2× burst around `:00`. All of a sender's keys share a `{sender}` hash tag, so the Lua script is Redis Cluster-safe. |
+| **Separate notification queue**      | A slow or erroring Slack call never blocks email sending.                                                                                                                                                                                                                            |
+| **Elasticsearch for search**         | MySQL `LIKE` on millions of rows is slow. ES failure only delays search results — email sending continues unaffected.                                                                                                                                                                |
+| **Session cookie, not JWT**          | Real logout/revocation. `httpOnly` + `SameSite=Lax` + `secure` in production.                                                                                                                                                                                                        |
+| **Google OAuth as the only login**   | Spec requirement; no password storage.                                                                                                                                                                                                                                               |
 
 ---
 
@@ -195,8 +195,9 @@ Index on `(user_id, status, scheduled_at)` keeps paginated list queries fast.
 
 2. **Slot assignment at insert time**: For N recipients across S senders,
    email _i_ gets sender `senders[i % S]` and
-   `scheduled_at = max(start + i·delay, start + ⌊i/hourlyLimit⌋·1h + (i mod hourlyLimit)·delay)`.
-   Order is preserved by construction.
+   `scheduled_at[i] = max(scheduled_at[i-1] + delay, scheduled_at[i - hourlyLimit] + 1h)`.
+   The second term is the rolling hourly window: any 60-minute span holds at most
+   `hourlyLimit` sends. Order is preserved because times only increase.
 
 3. Each row → BullMQ delayed job with `jobId = "email-<uuid>"`.
    Duplicate `jobId` submissions are silently ignored by BullMQ, so
@@ -212,7 +213,8 @@ Index on `(user_id, status, scheduled_at)` keeps paginated list queries fast.
 
 2. Reserve Lua EVALSHA: atomically reserve the next free slot for this sender.
            Returns the send timestamp; blocks the slot for exactly one job.
-           Slot in a full hour window → Slack alert (deduped per sender/window).
+           Last hour already full → slot pushed to 1 h after the oldest counted
+           send → Slack alert (deduped per user/sender/hour).
 
 3. Turn    Compare-and-set on the sender's last actual send time.
            Ensures ≥ MIN_DELAY_MS even if the slot maths is off by a few ms.
@@ -248,40 +250,46 @@ Index on `(user_id, status, scheduled_at)` keeps paginated list queries fast.
 **Test: 1 000 emails, 2 s delay, limit 200/h/sender, 3 senders:**
 
 - Senders are assigned round-robin, so each sender handles ~333 emails.
-- With limit 200/h, each sender fills its first window then rolls into the second.
-- The Lua reservation script ensures per-sender FIFO and exact hourly capping.
-- Fixed-window trade-off: up to 2× the limit can fire around an `XX:00:00` boundary.
+- With limit 200/h, each sender sends its first 200 two seconds apart; every later send
+  waits until one hour after the send 200 places before it. Nothing is dropped or failed.
+- The Lua reservation script ensures per-sender FIFO and exact capping over any rolling
+  60 minutes, so there is no burst when the clock crosses `XX:00:00`.
 - With `--scale worker=2`: both workers pick up jobs, per-sender Lua lock ensures
   no two workers reserve the same slot. `MAX(attempts)` stays 1.
 
 **Verified scenarios (automated tests + manual):**
 
-| Scenario                                | Result                                                  |
-| --------------------------------------- | ------------------------------------------------------- |
-| 6 emails, 1 s apart                     | All sent 40–120 ms after scheduled time, 1 attempt each |
-| Worker killed, restarted before due     | All sent once                                           |
-| Full Redis wipe while worker down       | Worker rebuilt from MySQL on boot, all sent on time     |
-| Hourly limit 7/sender, 9 emails at once | 5 sent in first window, 4 rolled to next hour           |
-| 30 emails at once                       | Per-sender gap 2 006–2 009 ms                           |
-| All runs combined                       | 55 sent, 0 duplicates, max attempts 1                   |
+| Scenario                                | Result                                                   |
+| --------------------------------------- | -------------------------------------------------------- |
+| 6 emails, 1 s apart                     | All sent 40–120 ms after scheduled time, 1 attempt each  |
+| Worker killed, restarted before due     | All sent once                                            |
+| Full Redis wipe while worker down       | Worker rebuilt from MySQL on boot, all sent on time      |
+| Limit 2, sends at 10:59:59 and 11:00:00 | 3rd held to 11:59:59 — the limit does not reset at `:00` |
+| Limit 10, 50 concurrent reservations    | Every 60-minute span holds ≤ 10 sends                    |
+| 30 emails at once                       | Per-sender gap 2 006–2 009 ms                            |
+| All runs combined                       | 55 sent, 0 duplicates, max attempts 1                    |
 
 ---
 
 ## API reference
 
-| Method | Path                            | Auth    | Description                 |
-| ------ | ------------------------------- | ------- | --------------------------- |
-| GET    | `/health`                       | —       | MySQL + Redis liveness      |
-| GET    | `/auth/google`                  | —       | Start Google OAuth flow     |
-| GET    | `/auth/google/callback`         | —       | OAuth callback              |
-| POST   | `/auth/logout`                  | ✓       | Invalidate session          |
-| GET    | `/api/me`                       | ✓       | Current user + Slack status |
-| POST   | `/api/campaigns`                | ✓       | Schedule a campaign         |
-| GET    | `/api/emails?tab&page&q&status` | ✓       | List/search emails          |
-| GET    | `/api/slack/connect`            | ✓       | Start Slack OAuth           |
-| GET    | `/api/slack/callback`           | ✓       | Slack OAuth callback        |
-| DELETE | `/api/slack`                    | ✓       | Disconnect Slack            |
-| GET    | `/admin/queues`                 | ✓ admin | Bull Board                  |
+| Method | Path                            | Auth    | Description                                                |
+| ------ | ------------------------------- | ------- | ---------------------------------------------------------- |
+| GET    | `/health`                       | —       | MySQL + Redis liveness                                     |
+| GET    | `/auth/google`                  | —       | Start Google OAuth flow                                    |
+| GET    | `/auth/google/callback`         | —       | OAuth callback                                             |
+| POST   | `/auth/logout`                  | ✓       | Invalidate session                                         |
+| GET    | `/api/me`                       | ✓       | Current user + Slack status                                |
+| POST   | `/api/campaigns`                | ✓       | Schedule a campaign                                        |
+| GET    | `/api/emails?tab&page&q&status` | ✓       | List/search emails                                         |
+| GET    | `/api/emails/:id`               | ✓       | Email detail (owner only)                                  |
+| PUT    | `/api/emails/:id/star`          | ✓       | Star / unstar                                              |
+| PUT    | `/api/emails/:id/archive`       | ✓       | Archive / unarchive                                        |
+| DELETE | `/api/emails/:id`               | ✓       | Delete; cancels it if still scheduled, `409` while sending |
+| GET    | `/api/slack/connect`            | ✓       | Start Slack OAuth                                          |
+| GET    | `/api/slack/callback`           | ✓       | Slack OAuth callback                                       |
+| DELETE | `/api/slack`                    | ✓       | Disconnect Slack                                           |
+| GET    | `/admin/queues`                 | ✓ admin | Bull Board                                                 |
 
 ---
 
@@ -310,7 +318,7 @@ node scripts/load-test.mjs \
 ```
 
 Produces immediate dashboard feedback, a Slack alert after ~10 sends, and
-demonstrates overflow into the next hour window.
+demonstrates sends being held back by the rolling hourly limit.
 
 ---
 
@@ -319,7 +327,7 @@ demonstrates overflow into the next hour window.
 | Setting                     | Env var                          | Default                             | Meaning                                                                                                                                                           |
 | --------------------------- | -------------------------------- | ----------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Minimum delay between sends | `MIN_DELAY_MS`                   | **2000** (min 2 seconds per sender) | Floor for the gap between two sends from the same sender. A campaign can ask for a longer delay, never a shorter one.                                             |
-| Emails per hour             | `MAX_EMAILS_PER_HOUR_PER_SENDER` | **200** per sender                  | Cap per sender per hour window. A campaign can lower it, never raise it.                                                                                          |
+| Emails per hour             | `MAX_EMAILS_PER_HOUR_PER_SENDER` | **200** per sender                  | Cap per sender over any rolling 60 minutes. A campaign can lower it, never raise it.                                                                                          |
 | Worker concurrency          | `WORKER_CONCURRENCY`             | **5**                               | Jobs one worker process runs in parallel. Safe because every claim is an atomic `UPDATE … WHERE status='scheduled'` and slots are reserved by a Redis Lua script. |
 
 ## Features by requirement
@@ -349,12 +357,13 @@ demonstrates overflow into the next hour window.
 
 ## Assumptions, shortcuts and trade-offs
 
-- **Fixed hourly window.** The per-sender counter is keyed by hour window. Around an `XX:00:00` boundary up to 2× the limit can be sent. A sliding window would remove this at the cost of a sorted set per sender.
+- **Rolling hourly window.** The limit holds over any 60 minutes, not per clock hour, at the cost of a small Redis list (N timestamps) per sender. Slack alerts are still grouped per clock hour so a long backlog produces one message per hour, not one per email.
+- **Delete is permanent.** Deleting a scheduled email cancels it (the worker's claim finds no row). An email that is mid-send can't be deleted (`409`), because an SMTP call can't be recalled. Archive is the reversible option.
 - **At-most-once on lease expiry.** If a worker dies mid-SMTP call, the email is marked `failed` rather than retried, because Ethereal has no idempotency key. One missed send is preferred over a duplicate.
 - **Polling, not push.** The dashboard refreshes every 5 s; no WebSocket or SSE.
 - **Rich-text bodies, sanitised.** Bodies are HTML from the Tiptap editor. The API sanitises on write and again on read (allow-list of formatting tags, http/https/mailto links only), and each email is sent as HTML plus a plain-text alternative. Bodies saved before rich text existed are escaped and shown as text.
 - **Attachments live in MySQL.** Up to 5 files (5 MB each, 10 MB total; images, PDF, text, CSV) are stored as blobs and read once per send. Simple and shared between API and worker containers; for very large campaigns object storage would be better. Uploads not attached to a campaign within 24 h are deleted by the maintenance sweep. Downloads are always `Content-Disposition: attachment` with `nosniff`.
 - **Email/password login is not implemented.** Only Google OAuth is real; the login form fields are shown disabled.
 - **One sender identity per email.** The "From" shown in the UI is the signed-in user; the actual SMTP sender is one of the configured Ethereal accounts.
-- **No cancel/reschedule and no `{{name}}` personalisation.** Out of scope for the time box.
+- **No reschedule and no `{{name}}` personalisation.** Out of scope for the time box.
 - **Ethereal is a fake SMTP.** Nothing is delivered to real inboxes; each send stores a preview URL instead.

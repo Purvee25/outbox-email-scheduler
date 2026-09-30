@@ -33,15 +33,33 @@ describe("reserveSendSlot", () => {
     expect(second.sendAt).toBe(NOW + 2000);
   });
 
-  it("moves reservations past the hourly limit to the next window and flags it", async () => {
+  it("delays a reservation past the hourly limit to one hour after the oldest counted send", async () => {
     const limits = { minDelayMs: 0, maxPerHour: 2 };
     const results = [];
     for (let i = 0; i < 3; i++)
       results.push(await reserveSendSlot(redis, SENDER, limits, NOW, prefix));
 
     expect(results.map((r) => r.hourlyLimitHit)).toEqual([false, false, true]);
-    expect(results[2]!.sendAt).toBe((WINDOW + 1) * HOUR_MS);
-    expect(results[2]!.window).toBe(WINDOW + 1);
+    expect(results[2]!.sendAt).toBe(NOW + HOUR_MS);
+  });
+
+  it("does not reset the limit at the top of the hour", async () => {
+    const limits = { minDelayMs: 0, maxPerHour: 2 };
+    const justBeforeHour = (WINDOW + 1) * HOUR_MS - 1000;
+    await reserveSendSlot(redis, SENDER, limits, justBeforeHour, prefix);
+    await reserveSendSlot(redis, SENDER, limits, justBeforeHour, prefix);
+
+    // A fixed clock-hour window would allow this one 1 s later, at :00.
+    const third = await reserveSendSlot(
+      redis,
+      SENDER,
+      limits,
+      justBeforeHour + 1000,
+      prefix,
+    );
+
+    expect(third.hourlyLimitHit).toBe(true);
+    expect(third.sendAt).toBe(justBeforeHour + HOUR_MS);
   });
 
   it("keeps limits per sender", async () => {
@@ -52,18 +70,26 @@ describe("reserveSendSlot", () => {
     expect([a.sendAt, b.sendAt]).toEqual([NOW, NOW]);
   });
 
-  it("never over-allocates a window under concurrent reservations", async () => {
-    const limits = { minDelayMs: 0, maxPerHour: 10 };
+  it("never puts more than the limit in any 60-minute span under concurrent reservations", async () => {
+    const limit = 10;
     const results = await Promise.all(
       Array.from({ length: 50 }, () =>
-        reserveSendSlot(redis, SENDER, limits, NOW, prefix),
+        reserveSendSlot(
+          redis,
+          SENDER,
+          { minDelayMs: 0, maxPerHour: limit },
+          NOW,
+          prefix,
+        ),
       ),
     );
 
-    const perWindow = new Map<number, number>();
-    for (const r of results)
-      perWindow.set(r.window, (perWindow.get(r.window) ?? 0) + 1);
-    expect([...perWindow.values()]).toEqual([10, 10, 10, 10, 10]);
+    const times = results.map((r) => r.sendAt).sort((a, b) => a - b);
+    for (let i = limit; i < times.length; i++) {
+      expect(times[i]! - times[i - limit]!).toBeGreaterThanOrEqual(HOUR_MS);
+    }
+    // Flagged once per spill into a later hour (the jump), not on every queued email behind it.
+    expect(results.filter((r) => r.hourlyLimitHit)).toHaveLength(4);
   });
 
   it("gives every concurrent reservation a distinct, gap-spaced time", async () => {
@@ -83,13 +109,19 @@ describe("acquireSendTurn", () => {
   it("allows the first send and makes the next one wait out the remaining gap", async () => {
     expect(await acquireSendTurn(redis, SENDER, 2000, NOW, prefix)).toBe(0);
     // Second job woke 73 ms early relative to the gap because the first one ran late.
-    expect(await acquireSendTurn(redis, SENDER, 2000, NOW + 1927, prefix)).toBe(73);
-    expect(await acquireSendTurn(redis, SENDER, 2000, NOW + 2000, prefix)).toBe(0);
+    expect(await acquireSendTurn(redis, SENDER, 2000, NOW + 1927, prefix)).toBe(
+      73,
+    );
+    expect(await acquireSendTurn(redis, SENDER, 2000, NOW + 2000, prefix)).toBe(
+      0,
+    );
   });
 
   it("lets only one of many simultaneous sends through", async () => {
     const waits = await Promise.all(
-      Array.from({ length: 10 }, () => acquireSendTurn(redis, SENDER, 2000, NOW, prefix)),
+      Array.from({ length: 10 }, () =>
+        acquireSendTurn(redis, SENDER, 2000, NOW, prefix),
+      ),
     );
 
     expect(waits.filter((w) => w === 0)).toHaveLength(1);

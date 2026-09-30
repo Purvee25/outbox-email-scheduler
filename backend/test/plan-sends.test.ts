@@ -30,7 +30,7 @@ describe("planSends", () => {
     ]);
   });
 
-  it("moves sends beyond the hourly limit to the next clock hour", () => {
+  it("delays sends beyond the hourly limit until an hour after the send `limit` places back", () => {
     const plan = planSends(recipients(5), {
       startAt: atHour(100),
       delayMs: 1000,
@@ -47,8 +47,8 @@ describe("planSends", () => {
     ]);
   });
 
-  it("counts windows by clock hour, not from the start time", () => {
-    // Starts 1 minute before the hour: the first window has room for 2, then a fresh hour begins.
+  it("uses a rolling window, so crossing :00 does not reset the limit", () => {
+    // A clock-hour window would allow 100:59, 101:00 and 101:01 (3 sends in 2 minutes).
     const plan = planSends(recipients(3), {
       startAt: atHour(100, 59),
       delayMs: 60_000,
@@ -59,8 +59,23 @@ describe("planSends", () => {
     expect(plan.map((p) => p.scheduledAt)).toEqual([
       atHour(100, 59),
       atHour(101, 0),
-      atHour(101, 1),
+      atHour(101, 59),
     ]);
+  });
+
+  it("never puts more than the limit in any 60-minute span", () => {
+    const limit = 7;
+    const plan = planSends(recipients(100), {
+      startAt: atHour(100, 23),
+      delayMs: 90_000,
+      hourlyLimit: limit,
+      senders: SENDERS,
+    });
+    const times = plan.map((p) => p.scheduledAt.getTime());
+
+    for (let i = limit; i < times.length; i++) {
+      expect(times[i]! - times[i - limit]!).toBeGreaterThanOrEqual(HOUR_MS);
+    }
   });
 
   it("keeps send times non-decreasing for large campaigns", () => {

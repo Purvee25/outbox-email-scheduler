@@ -3,7 +3,7 @@ export const HOUR_MS = 60 * 60 * 1000;
 export interface SendPlanOptions {
   startAt: Date;
   delayMs: number;
-  /** Max emails this campaign sends in one clock-hour window. */
+  /** Max emails this campaign sends in any rolling 60-minute window. */
   hourlyLimit: number;
   senders: readonly string[];
 }
@@ -17,10 +17,10 @@ export interface PlannedSend {
 /**
  * Assigns each recipient a sender (round-robin) and a send time.
  *
- * Sends are spaced `delayMs` apart starting at `startAt`. When a clock-hour window has used
- * the campaign's `hourlyLimit`, the next send moves to the start of the following window.
- * Windows are aligned to clock hours so they match the runtime per-sender limiter; order is
- * preserved because send times only ever increase.
+ * Sends are spaced `delayMs` apart starting at `startAt`. The hourly limit is a rolling
+ * window, the same rule the runtime per-sender limiter uses: a send is never earlier than one
+ * hour after the send `hourlyLimit` places before it, so no 60-minute span holds more than
+ * `hourlyLimit` sends. Order is preserved because send times only ever increase.
  */
 export function planSends(
   recipients: readonly string[],
@@ -32,24 +32,15 @@ export function planSends(
 
   const plan: PlannedSend[] = [];
   let sendAt = startAt.getTime();
-  let window = Math.floor(sendAt / HOUR_MS);
-  let sentInWindow = 0;
 
   recipients.forEach((recipient, index) => {
     if (index > 0) sendAt += delayMs;
 
-    const sendWindow = Math.floor(sendAt / HOUR_MS);
-    if (sendWindow !== window) {
-      window = sendWindow;
-      sentInWindow = 0;
-    }
-    if (sentInWindow >= hourlyLimit) {
-      window += 1;
-      sendAt = window * HOUR_MS;
-      sentInWindow = 0;
+    const windowStart = plan[index - hourlyLimit]?.scheduledAt.getTime();
+    if (windowStart !== undefined && sendAt < windowStart + HOUR_MS) {
+      sendAt = windowStart + HOUR_MS;
     }
 
-    sentInWindow += 1;
     plan.push({
       recipient,
       sender: senders[index % senders.length] as string,

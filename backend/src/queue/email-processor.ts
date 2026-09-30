@@ -84,7 +84,10 @@ export async function processEmailJob(
       subject: email.subject,
       html: toSafeHtml(email.body),
       text: htmlToText(toSafeHtml(email.body)),
-      attachments: files.map(({ data, ...file }) => ({ ...file, content: data })),
+      attachments: files.map(({ data, ...file }) => ({
+        ...file,
+        content: data,
+      })),
     });
     await markSent(emailId, leaseToken, result);
     requestIndexingSafely([emailId]);
@@ -108,7 +111,7 @@ async function resolveSendSlot(
     const resumesAt = new Date(reservation.sendAt).toISOString();
     logger.warn(
       { emailId: job.data.emailId, sender: email.sender, sendAt: resumesAt },
-      "hourly limit reached for sender; email moved to next window",
+      "hourly limit reached for sender; email delayed until the rolling window frees up",
     );
     await notifyRateLimitHit({
       userId: email.userId,
