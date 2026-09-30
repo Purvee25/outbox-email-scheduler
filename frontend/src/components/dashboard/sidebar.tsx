@@ -95,7 +95,9 @@ interface SidebarProps {
   user: User;
   slackConnected: boolean;
   tab: EmailTab;
+  analyticsOpen: boolean;
   onTabChange: (tab: EmailTab) => void;
+  onAnalytics: () => void;
   onCompose: () => void;
 }
 
@@ -103,7 +105,9 @@ export function Sidebar({
   user,
   slackConnected,
   tab,
+  analyticsOpen,
   onTabChange,
+  onAnalytics,
   onCompose,
 }: SidebarProps) {
   const router = useRouter();
@@ -181,16 +185,38 @@ export function Sidebar({
           <NavItem
             key={value}
             tab={value}
-            active={value === tab}
+            active={value === tab && !analyticsOpen}
             onSelect={() => onTabChange(value)}
           />
         ))}
+        <button
+          type="button"
+          onClick={onAnalytics}
+          aria-current={analyticsOpen ? "page" : undefined}
+          className={cn(
+            "flex h-11 w-full items-center gap-3 rounded-control px-3 text-left text-[15px] transition-colors",
+            analyticsOpen
+              ? "bg-mint font-semibold text-ink"
+              : "text-ink-muted hover:bg-field",
+          )}
+        >
+          <svg
+            viewBox="0 0 20 20"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.5"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            className="size-5 shrink-0"
+            aria-hidden
+          >
+            <path d="M2 14.5h2.5V10H2v4.5ZM8.75 14.5h2.5V5.5h-2.5v9ZM15.5 14.5H18V8h-2.5v6.5ZM1 17h18" />
+          </svg>
+          <span className="flex-1">Analytics</span>
+        </button>
       </nav>
 
       <div className="mt-3">
-        <p className="px-3 pb-2 text-xs tracking-wide text-ink-muted uppercase">
-          Activity
-        </p>
         <ActivityChart sidebar />
       </div>
     </aside>

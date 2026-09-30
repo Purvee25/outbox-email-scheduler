@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
 import { useSession } from "@/hooks/use-session";
+import { AnalyticsView } from "./analytics-view";
 import { CampaignStats } from "./campaign-stats";
 import { ComposeView } from "./compose-view";
 import { EmailDetail } from "./email-detail";
@@ -34,6 +35,7 @@ export function Dashboard() {
   const [status, setStatus] = useState<EmailStatus | undefined>();
   const [composing, setComposing] = useState(false);
   const [openEmailId, setOpenEmailId] = useState<string | null>(null);
+  const [analyticsOpen, setAnalyticsOpen] = useState(false);
   const debouncedSearch = useDebouncedValue(search.trim(), SEARCH_DEBOUNCE_MS);
 
   const slackResult = searchParams.get("slack");
@@ -86,44 +88,51 @@ export function Dashboard() {
         user={session.data.user}
         slackConnected={session.data.slackConnected}
         tab={tab}
+        analyticsOpen={analyticsOpen}
         onTabChange={(next) => {
           setTab(next);
           setStatus(undefined);
           setPage(1);
+          setAnalyticsOpen(false);
         }}
+        onAnalytics={() => setAnalyticsOpen((o) => !o)}
         onCompose={openCompose}
       />
-      <main className="animate-fade-up min-w-0 flex-1 px-4 py-4 md:pr-6">
-        <CampaignStats />
-        <EmailFilters
-          tab={tab}
-          search={search}
-          onSearchChange={(value) => {
-            setSearch(value);
-            setPage(1);
-          }}
-          status={status}
-          onStatusChange={(value) => {
-            setStatus(value);
-            setPage(1);
-          }}
-        />
-        <div className="mt-4">
-          <EmailTable
+      {analyticsOpen ? (
+        <AnalyticsView />
+      ) : (
+        <main className="animate-fade-up min-w-0 flex-1 px-4 py-4 md:pr-6">
+          <CampaignStats />
+          <EmailFilters
             tab={tab}
-            page={page}
-            onPageChange={setPage}
-            search={debouncedSearch}
+            search={search}
+            onSearchChange={(value) => {
+              setSearch(value);
+              setPage(1);
+            }}
             status={status}
-            onOpen={setOpenEmailId}
-            emptyAction={
-              <Button onClick={openCompose} id="compose-empty-btn">
-                Compose
-              </Button>
-            }
+            onStatusChange={(value) => {
+              setStatus(value);
+              setPage(1);
+            }}
           />
-        </div>
-      </main>
+          <div className="mt-4">
+            <EmailTable
+              tab={tab}
+              page={page}
+              onPageChange={setPage}
+              search={debouncedSearch}
+              status={status}
+              onOpen={setOpenEmailId}
+              emptyAction={
+                <Button onClick={openCompose} id="compose-empty-btn">
+                  Compose
+                </Button>
+              }
+            />
+          </div>
+        </main>
+      )}
     </div>
   );
 }
