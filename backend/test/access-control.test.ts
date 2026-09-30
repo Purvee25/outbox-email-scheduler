@@ -1,5 +1,5 @@
 import request from "supertest";
-import { afterEach, beforeAll, describe, expect, it } from "vitest";
+import { afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { createApp } from "../src/app.js";
 import { sessionRedis } from "../src/lib/redis.js";
 import {
@@ -21,6 +21,12 @@ async function login(email?: string) {
 beforeAll(async () => {
   await connectSessionRedis();
   app = createApp();
+});
+
+// The auth limiter counts in shared Redis; stale counts from earlier runs or a dev server would 429 these tests.
+beforeEach(async () => {
+  const keys = await sessionRedis.keys("rl-api:auth:*");
+  if (keys.length > 0) await sessionRedis.del(keys);
 });
 
 afterEach(async () => {
