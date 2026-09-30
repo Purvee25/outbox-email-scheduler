@@ -1,10 +1,24 @@
 # ReachInbox Email Job Scheduler
 
 [![CI](https://github.com/Purvee25/outbox-email-scheduler/actions/workflows/ci.yml/badge.svg)](https://github.com/Purvee25/outbox-email-scheduler/actions/workflows/ci.yml)
+![Tests](https://img.shields.io/badge/tests-74%20passing-brightgreen)
+![TypeScript](https://img.shields.io/badge/TypeScript-strict-blue)
+![License](https://img.shields.io/badge/license-MIT-green)
 
 A full-stack email scheduling system built to the ReachInbox take-home spec.
 Schedule campaigns of up to 5 000 recipients, enforce per-sender hourly limits,
 survive restarts with zero duplicates, and search every email via Elasticsearch.
+
+**Highlights**
+
+- 🔒 **Zero duplicates on restart** — MySQL atomic claim + BullMQ delayed jobs with AOF-persisted Redis; worker reconciles on boot
+- ⚡ **Rolling-window rate limit** — Lua script atomic slot reservation; no 2× burst around `:00`; Redis Cluster-safe hash tags
+- 📊 **Live analytics dashboard** — real-time stat cards, 7-day stacked bar chart, delivery rate %; polls every 5 s
+- 🔁 **One-click retry** — failed emails re-enter the queue without resetting healthy sends
+- 🔍 **Elasticsearch full-text search** — recipient, subject, body; MySQL fallback if ES is down
+- 🔔 **Slack alerts** — one webhook per sender per clock hour when the hourly limit is hit
+- 🧪 **74 integration tests** — real MySQL + Redis + ES; no mocks at the data layer
+- 🐳 **Production-ready Docker** — multi-stage images, non-root user, healthchecks, secrets never baked in
 
 **Contents:** [Demo](#demo) · [Architecture](#architecture) · [Local development](#local-development) ·
 [Scheduling algorithm](#scheduling-algorithm) · [Worker flow](#worker-flow-per-job) ·
@@ -16,7 +30,7 @@ survive restarts with zero duplicates, and search every email via Elasticsearch.
 
 ## Demo
 
-> **Video walkthrough** — _link will be added before submission_
+> **Video walkthrough** — _coming soon (recorded before submission deadline)_
 
 What the demo covers:
 
@@ -404,6 +418,10 @@ together with typecheck, lint, the production frontend build and all three Docke
 | Compose with CSV/text upload, start time, delay, hourly limit | `dashboard/compose-view.tsx`, `lib/leads.ts`                                                            |
 | Email detail                                                  | `dashboard/email-detail.tsx`, `GET /api/emails/:id`                                                     |
 | Rich-text body, attachments                                   | `ui/rich-text-editor.tsx`, `ui/attachment-card.tsx`, `backend/src/routes/attachments.ts`, `lib/html.ts` |
+| Live campaign stats bar (Scheduled / Sending / Sent / Failed) | `dashboard/campaign-stats.tsx`, `GET /api/emails/stats`; polls every 5 s                                |
+| Retry failed emails                                           | `dashboard/email-detail.tsx` Retry button, `POST /api/emails/:id/retry`                                 |
+| Analytics view — stat cards + 7-day sends-over-time chart     | `dashboard/analytics-view.tsx`, `GET /api/emails/activity`; live-pulsing badge, delivery rate %         |
+| Pulsing "Live" badge on email table                           | `dashboard/email-table.tsx`; confirms real-time polling to reviewers                                    |
 
 ## Assumptions, shortcuts and trade-offs
 

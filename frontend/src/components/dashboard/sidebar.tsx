@@ -9,7 +9,6 @@ import { Avatar } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { api, queryKeys } from "@/lib/api";
 import { cn } from "@/lib/cn";
-import { ActivityChart } from "./activity-chart";
 import { SlackControl } from "./slack-control";
 
 const COUNT_POLL_MS = 5_000;
@@ -215,10 +214,6 @@ export function Sidebar({
           <span className="flex-1">Analytics</span>
         </button>
       </nav>
-
-      <div className="mt-3">
-        <ActivityChart sidebar />
-      </div>
     </aside>
   );
 }
