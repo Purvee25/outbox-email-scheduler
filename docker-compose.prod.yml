@@ -1,0 +1,155 @@
+# Production docker-compose — full single-VM deploy (Hetzner / DigitalOcean / Oracle).
+# For Railway/Render, each service is deployed separately; see docs/railway.md.
+#
+# Required env file: .env.production
+# Quick start:
+#   cp .env.example .env.production   # fill every value
+#   docker compose -f docker-compose.prod.yml --env-file .env.production up -d
+
+services:
+  # ── Infrastructure ──────────────────────────────────────────────────────────
+  mysql:
+    image: mysql:8.4
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-scheduler}
+      MYSQL_USER: ${MYSQL_USER:-scheduler}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+    volumes:
+      - mysql-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-uroot", "-p${MYSQL_ROOT_PASSWORD}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    # Not exposed externally — only reachable within the Docker network.
+
+  redis:
+    image: redis:7.4-alpine
+    restart: unless-stopped
+    command:
+      - redis-server
+      - --appendonly yes
+      - --appendfsync everysec
+      - --maxmemory-policy noeviction
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.19.2
+    restart: unless-stopped
+    environment:
+      discovery.type: single-node
+      xpack.security.enabled: "false"
+      ES_JAVA_OPTS: -Xms512m -Xmx512m
+    volumes:
+      - es-data:/usr/share/elasticsearch/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fs http://localhost:9200/_cluster/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+
+  # ── Application ─────────────────────────────────────────────────────────────
+  migrate:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+      target: api
+    command: ["node", "--import", "tsx/esm", "backend/src/db/migrate.ts"]
+    env_file: .env.production
+    environment:
+      DATABASE_URL: mysql://${MYSQL_USER:-scheduler}:${MYSQL_PASSWORD}@mysql:3306/${MYSQL_DATABASE:-scheduler}
+      REDIS_URL: redis://redis:6379
+      ELASTICSEARCH_URL: http://elasticsearch:9200
+    depends_on:
+      mysql:
+        condition: service_healthy
+    restart: "no"   # runs once then exits
+
+  api:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+      target: api
+    restart: unless-stopped
+    env_file: .env.production
+    environment:
+      DATABASE_URL: mysql://${MYSQL_USER:-scheduler}:${MYSQL_PASSWORD}@mysql:3306/${MYSQL_DATABASE:-scheduler}
+      REDIS_URL: redis://redis:6379
+      ELASTICSEARCH_URL: http://elasticsearch:9200
+      NODE_ENV: production
+    ports:
+      - "4000:4000"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  worker:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+      target: worker
+    restart: unless-stopped
+    env_file: .env.production
+    environment:
+      DATABASE_URL: mysql://${MYSQL_USER:-scheduler}:${MYSQL_PASSWORD}@mysql:3306/${MYSQL_DATABASE:-scheduler}
+      REDIS_URL: redis://redis:6379
+      ELASTICSEARCH_URL: http://elasticsearch:9200
+      NODE_ENV: production
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  # Scale to 2 workers for demo: docker compose ... up -d --scale worker=2
+  # BullMQ per-sender Lua reservation ensures the hourly limit holds regardless
+  # of worker count.
+
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: ${API_PUBLIC_URL}
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      NODE_ENV: production
+
+  # ── Reverse proxy (HTTPS) ────────────────────────────────────────────────────
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"   # HTTP/3
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      - api
+      - frontend
+
+volumes:
+  mysql-data:
+  redis-data:
+  es-data:
+  caddy-data:
+  caddy-config:

@@ -1,0 +1,22 @@
+# Caddyfile — replace YOUR_DOMAIN with your DuckDNS subdomain (e.g. myapp.duckdns.org)
+# or your sslip.io address (e.g. 1-2-3-4.sslip.io).
+# Caddy fetches a Let's Encrypt cert automatically on first request.
+
+YOUR_DOMAIN {
+  # Frontend — proxy everything except /api, /auth, /health, /admin
+  handle /api/* {
+    reverse_proxy api:4000
+  }
+  handle /auth/* {
+    reverse_proxy api:4000
+  }
+  handle /health {
+    reverse_proxy api:4000
+  }
+  handle /admin/* {
+    reverse_proxy api:4000
+  }
+  handle {
+    reverse_proxy frontend:3000
+  }
+}

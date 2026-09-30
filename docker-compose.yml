@@ -1,3 +1,5 @@
+name: outbox-email-scheduler
+
 services:
   mysql:
     image: mysql:8.4
