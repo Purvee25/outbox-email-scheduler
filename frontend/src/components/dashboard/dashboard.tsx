@@ -1,26 +1,24 @@
 "use client";
 
-import { EMAIL_TABS, type EmailStatus, type EmailTab } from "@scheduler/shared";
+import type { EmailStatus, EmailTab } from "@scheduler/shared";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Tabs } from "@/components/ui/tabs";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
 import { useSession } from "@/hooks/use-session";
-import { ComposeModal } from "./compose-modal";
+import { ComposeView } from "./compose-view";
+import { EmailDetail } from "./email-detail";
 import { EmailFilters } from "./email-filters";
 import { EmailTable } from "./email-table";
-import { Header } from "./header";
+import { Sidebar } from "./sidebar";
 
-const TAB_LABELS: Record<EmailTab, string> = { scheduled: "Scheduled Emails", sent: "Sent Emails" };
 const SEARCH_DEBOUNCE_MS = 300;
-const TABS = EMAIL_TABS.map((value) => ({ value, label: TAB_LABELS[value] }));
 
-/** Messages for the ?slack= result the API redirects back with after the Slack OAuth flow. */
 const SLACK_RESULTS: Record<string, () => void> = {
-  connected: () => toast.success("Slack connected — rate-limit alerts will be posted there"),
+  connected: () =>
+    toast.success("Slack connected — rate-limit alerts will be posted there"),
   denied: () => toast.info("Slack connection cancelled"),
   error: () => toast.error("Couldn't connect Slack. Please try again."),
 };
@@ -33,7 +31,8 @@ export function Dashboard() {
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState<EmailStatus | undefined>();
-  const [composeOpen, setComposeOpen] = useState(false);
+  const [composing, setComposing] = useState(false);
+  const [openEmailId, setOpenEmailId] = useState<string | null>(null);
   const debouncedSearch = useDebouncedValue(search.trim(), SEARCH_DEBOUNCE_MS);
 
   const slackResult = searchParams.get("slack");
@@ -45,66 +44,84 @@ export function Dashboard() {
 
   if (!session.data) {
     return (
-      <div className="mx-auto max-w-6xl space-y-6 px-4 py-10 sm:px-6" aria-busy>
-        <Skeleton className="h-16 w-full" />
-        <Skeleton className="h-96 w-full" />
+      <div className="flex min-h-screen">
+        <div className="w-[240px] space-y-3 p-3">
+          <Skeleton className="h-12 w-full" />
+          <Skeleton className="h-16 w-full" />
+          <Skeleton className="h-12 w-full" />
+        </div>
+        <div className="flex-1 space-y-4 p-6">
+          <Skeleton className="h-12 w-full" />
+          <Skeleton className="h-[420px] w-full" />
+        </div>
       </div>
     );
   }
 
-  const openCompose = () => setComposeOpen(true);
+  if (composing) {
+    return (
+      <ComposeView
+        user={session.data.user}
+        onClose={() => setComposing(false)}
+      />
+    );
+  }
+
+  if (openEmailId) {
+    return (
+      <EmailDetail
+        emailId={openEmailId}
+        user={session.data.user}
+        onBack={() => setOpenEmailId(null)}
+      />
+    );
+  }
+
+  const openCompose = () => setComposing(true);
 
   return (
-    <>
-      <Header user={session.data.user} slackConnected={session.data.slackConnected} />
-      <main className="mx-auto max-w-6xl px-4 py-8 sm:px-6">
-        <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
-          <div>
-            <h1 className="text-2xl font-semibold tracking-tight">Emails</h1>
-            <p className="mt-1 text-sm text-ink-muted">Scheduled sends update automatically as they go out.</p>
-          </div>
-          <Button onClick={openCompose}>Compose New Email</Button>
+    <div className="flex min-h-screen flex-col md:flex-row">
+      <Sidebar
+        user={session.data.user}
+        slackConnected={session.data.slackConnected}
+        tab={tab}
+        onTabChange={(next) => {
+          setTab(next);
+          setStatus(undefined);
+          setPage(1);
+        }}
+        onCompose={openCompose}
+      />
+      <main className="animate-fade-up min-w-0 flex-1 px-4 py-4 md:pr-6">
+        <EmailFilters
+          tab={tab}
+          search={search}
+          onSearchChange={(value) => {
+            setSearch(value);
+            setPage(1);
+          }}
+          status={status}
+          onStatusChange={(value) => {
+            setStatus(value);
+            setPage(1);
+          }}
+        />
+        <div className="mt-4">
+          <EmailTable
+            tab={tab}
+            page={page}
+            onPageChange={setPage}
+            search={debouncedSearch}
+            status={status}
+            onOpen={setOpenEmailId}
+            emptyAction={
+              <Button onClick={openCompose} id="compose-empty-btn">
+                Compose
+              </Button>
+            }
+          />
         </div>
-
-        <section className="overflow-hidden rounded-card border border-border bg-surface">
-          <div className="border-b border-border px-6 pt-4">
-            <Tabs
-              label="Email lists"
-              tabs={TABS}
-              value={tab}
-              onChange={(next) => {
-                setTab(next);
-                setStatus(undefined); // statuses differ per tab
-                setPage(1);
-              }}
-            />
-          </div>
-          <div role="tabpanel">
-            <EmailFilters
-              tab={tab}
-              search={search}
-              onSearchChange={(value) => {
-                setSearch(value);
-                setPage(1);
-              }}
-              status={status}
-              onStatusChange={(value) => {
-                setStatus(value);
-                setPage(1);
-              }}
-            />
-            <EmailTable
-              tab={tab}
-              page={page}
-              onPageChange={setPage}
-              search={debouncedSearch}
-              status={status}
-              emptyAction={<Button onClick={openCompose}>Compose New Email</Button>}
-            />
-          </div>
-        </section>
       </main>
-      <ComposeModal open={composeOpen} onClose={() => setComposeOpen(false)} />
-    </>
+    </div>
   );
 }

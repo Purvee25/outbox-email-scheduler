@@ -13,7 +13,8 @@ export function SlackControl({ connected }: { connected: boolean }) {
       toast.success("Slack disconnected");
       return queryClient.invalidateQueries({ queryKey: queryKeys.me });
     },
-    onError: (error) => toast.error(`Couldn't disconnect Slack: ${error.message}`),
+    onError: (error) =>
+      toast.error(`Couldn't disconnect Slack: ${error.message}`),
   });
   const sendTest = useMutation({
     mutationFn: api.sendSlackTest,
@@ -32,14 +33,24 @@ export function SlackControl({ connected }: { connected: boolean }) {
 
   return (
     <div className="flex items-center gap-2">
-      <span className="hidden items-center gap-1.5 text-sm text-success-700 md:inline-flex">
+      <span className="inline-flex items-center gap-1.5 text-sm text-brand-700">
         <span aria-hidden className="size-2 rounded-full bg-current" />
         Slack connected
       </span>
-      <Button variant="ghost" size="sm" loading={sendTest.isPending} onClick={() => sendTest.mutate()}>
+      <Button
+        variant="ghost"
+        size="sm"
+        loading={sendTest.isPending}
+        onClick={() => sendTest.mutate()}
+      >
         Send test
       </Button>
-      <Button variant="ghost" size="sm" loading={disconnect.isPending} onClick={() => disconnect.mutate()}>
+      <Button
+        variant="ghost"
+        size="sm"
+        loading={disconnect.isPending}
+        onClick={() => disconnect.mutate()}
+      >
         Disconnect
       </Button>
     </div>

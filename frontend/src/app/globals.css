@@ -1,44 +1,135 @@
 @import "tailwindcss";
 
 /*
- * Design tokens. Every color and radius used by components comes from here, so matching the
- * Figma is a matter of updating these values rather than touching components.
+ * Design tokens — light canvas, green brand.
+ * All components use these tokens, so restyling means changing values here only.
  */
 @theme {
   --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
 
-  --color-canvas: #f7f8fa;
+  /* Surfaces */
+  --color-canvas: #ffffff;
   --color-surface: #ffffff;
-  --color-border: #e4e7ec;
-  --color-ink: #101828;
-  --color-ink-muted: #667085;
-  --color-ink-subtle: #98a2b3;
+  --color-field: #f5f6f4;
+  --color-mint: #e6f6ec;
 
-  --color-brand-50: #eef4ff;
-  --color-brand-100: #dbe7ff;
-  --color-brand-500: #3b6cf6;
-  --color-brand-600: #2a58e3;
-  --color-brand-700: #2146bb;
+  /* Borders */
+  --color-border: #e6e8e5;
+  --color-border-strong: #d4d8d3;
 
-  --color-success-50: #ecfdf3;
-  --color-success-700: #067647;
-  --color-warning-50: #fffaeb;
-  --color-warning-700: #b54708;
-  --color-danger-50: #fef3f2;
-  --color-danger-600: #d92d20;
-  --color-danger-700: #b42318;
-  --color-info-50: #eff8ff;
-  --color-info-700: #175cd3;
+  /* Ink */
+  --color-ink: #1a1c1a;
+  --color-ink-muted: #6b726d;
+  --color-ink-subtle: #a0a6a1;
 
-  --radius-card: 0.75rem;
-  --radius-control: 0.5rem;
+  /* Brand — green */
+  --color-brand-50: #e6f6ec;
+  --color-brand-100: #c9ecd6;
+  --color-brand-500: #12b74d;
+  --color-brand-600: #08a742;
+  --color-brand-700: #068736;
+
+  /* Status */
+  --color-success-bg: #e6f6ec;
+  --color-success-fg: #068736;
+  --color-warning-bg: #fff1e2;
+  --color-warning-fg: #c2410c;
+  --color-warning-border: #fdd3a4;
+  --color-danger-bg: #fdeaea;
+  --color-danger-fg: #c62828;
+  --color-neutral-bg: #f0f1ef;
+  --color-neutral-fg: #55595a;
+
+  --color-danger-600: #dc2626;
+  --color-danger-700: #b91c1c;
+
+  /* Radii */
+  --radius-card: 1rem;
+  --radius-control: 0.75rem;
+  --radius-pill: 9999px;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  color-scheme: light;
 }
 
 body {
   background: var(--color-canvas);
   color: var(--color-ink);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  min-height: 100dvh;
 }
 
-dialog::backdrop {
-  background: rgb(16 24 40 / 0.45);
+::selection {
+  background: rgba(8, 167, 66, 0.25);
 }
+
+/* ─── Skeleton shimmer ──────────────────────────────────────────────────────── */
+@keyframes shimmer {
+  0% {
+    background-position: -400px 0;
+  }
+  100% {
+    background-position: 400px 0;
+  }
+}
+.skeleton {
+  background: linear-gradient(90deg, #f0f1ef 25%, #e6e8e5 50%, #f0f1ef 75%);
+  background-size: 800px 100%;
+  animation: shimmer 1.5s infinite linear;
+  border-radius: var(--radius-control);
+}
+
+/* ─── Micro-animations ──────────────────────────────────────────────────────── */
+@keyframes fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@keyframes pulse-dot {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.4;
+  }
+}
+.animate-fade-up {
+  animation: fade-up 0.3s ease both;
+}
+.pulse-dot {
+  animation: pulse-dot 1.8s ease-in-out infinite;
+}
+
+/* ─── Focus ring ────────────────────────────────────────────────────────────── */
+:focus-visible {
+  outline: 2px solid var(--color-brand-500);
+  outline-offset: 2px;
+}
+
+/* ─── Rich text (editor + rendered email bodies) ────────────────────────────── */
+.rich-text > * + * { margin-top: 0.75em; }
+.rich-text h1 { font-size: 1.5rem; font-weight: 600; }
+.rich-text h2 { font-size: 1.25rem; font-weight: 600; }
+.rich-text h3 { font-size: 1.1rem; font-weight: 600; }
+.rich-text ul { list-style: disc; padding-left: 1.5rem; }
+.rich-text ol { list-style: decimal; padding-left: 1.5rem; }
+.rich-text blockquote {
+  border-left: 3px solid var(--color-border-strong);
+  padding-left: 1rem;
+  color: var(--color-ink-muted);
+}
+.rich-text a { color: var(--color-brand-600); text-decoration: underline; }

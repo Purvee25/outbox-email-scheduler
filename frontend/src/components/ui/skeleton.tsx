@@ -1,5 +1,5 @@
 import { cn } from "@/lib/cn";
 
 export function Skeleton({ className }: { className?: string }) {
-  return <div aria-hidden className={cn("animate-pulse rounded bg-border/70", className)} />;
+  return <div aria-hidden className={cn("skeleton", className)} />;
 }
