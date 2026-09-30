@@ -9,6 +9,7 @@ import { campaigns, emails } from "../db/schema.js";
 import { logger } from "../lib/logger.js";
 import { senderAddresses } from "../mail/senders.js";
 import { enqueueEmails } from "../queue/queues.js";
+import { requestIndexingSafely } from "../queue/search-index.js";
 import { normalizeRecipients, planSends } from "../scheduling/plan-sends.js";
 
 const INSERT_CHUNK_SIZE = 500;
@@ -65,11 +66,9 @@ export async function createCampaign(
   try {
     await enqueueEmails(rows);
   } catch (error) {
-    logger.error(
-      { err: error, campaignId },
-      "enqueue failed after commit; reconciliation will recover",
-    );
+    logger.error({ err: error, campaignId }, "enqueue failed after commit; reconciliation will recover");
   }
+  requestIndexingSafely(rows.map((row) => row.id));
 
   return {
     campaignId,

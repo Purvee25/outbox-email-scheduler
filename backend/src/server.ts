@@ -3,8 +3,13 @@ import { env } from "./config/env.js";
 import { pool } from "./db/client.js";
 import { logger } from "./lib/logger.js";
 import { redis, sessionRedis } from "./lib/redis.js";
+import { ensureEmailIndex } from "./search/client.js";
 
 await sessionRedis.connect();
+// Search is secondary: start without it and let indexing retry until Elasticsearch is up.
+await ensureEmailIndex().catch((error: unknown) =>
+  logger.warn({ err: error }, "elasticsearch unavailable at startup; search will recover when it is"),
+);
 
 const server = createApp().listen(env.PORT, () => {
   logger.info({ port: env.PORT }, "api listening");

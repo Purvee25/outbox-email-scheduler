@@ -1,6 +1,6 @@
 "use client";
 
-import type { EmailListItem, EmailTab } from "@scheduler/shared";
+import type { EmailListItem, EmailStatus, EmailTab } from "@scheduler/shared";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import type { ReactNode } from "react";
 import { DataTable, type Column } from "@/components/ui/data-table";
@@ -71,16 +71,21 @@ interface EmailTableProps {
   tab: EmailTab;
   page: number;
   onPageChange: (page: number) => void;
+  /** Debounced free-text search; empty lists everything. */
+  search: string;
+  status?: EmailStatus;
   emptyAction: ReactNode;
 }
 
-export function EmailTable({ tab, page, onPageChange, emptyAction }: EmailTableProps) {
+export function EmailTable({ tab, page, onPageChange, search, status, emptyAction }: EmailTableProps) {
+  const params = { tab, page, pageSize: PAGE_SIZE, q: search || undefined, status };
   const query = useQuery({
-    queryKey: queryKeys.emails(tab, page),
-    queryFn: () => api.listEmails(tab, page, PAGE_SIZE),
+    queryKey: queryKeys.emails(params),
+    queryFn: () => api.listEmails(params),
     refetchInterval: POLL_INTERVAL_MS,
     placeholderData: keepPreviousData,
   });
+  const filtered = Boolean(search || status);
 
   return (
     <>
@@ -92,7 +97,13 @@ export function EmailTable({ tab, page, onPageChange, emptyAction }: EmailTableP
         loading={query.isPending}
         error={query.error}
         onRetry={() => void query.refetch()}
-        empty={<EmptyState {...EMPTY_COPY[tab]} action={tab === "scheduled" ? emptyAction : undefined} />}
+        empty={
+          filtered ? (
+            <EmptyState title="No matching emails" description="Try a different search or clear the filters." />
+          ) : (
+            <EmptyState {...EMPTY_COPY[tab]} action={tab === "scheduled" ? emptyAction : undefined} />
+          )
+        }
       />
       {query.data && (
         <Pagination page={page} pageSize={PAGE_SIZE} total={query.data.total} onPageChange={onPageChange} />

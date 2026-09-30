@@ -2,6 +2,8 @@
 process.loadEnvFile(".env");
 process.env.NODE_ENV = "test";
 process.env.MAIL_TRANSPORT = "log";
+process.env.ELASTICSEARCH_INDEX = "emails-test";
+process.env.QUEUE_PREFIX = "bull-test";
 // Fake OAuth credentials: Slack's HTTP API is stubbed in the tests that use them.
 process.env.SLACK_CLIENT_ID = "test-slack-client";
 process.env.SLACK_CLIENT_SECRET = "test-slack-secret";

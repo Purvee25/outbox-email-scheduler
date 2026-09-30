@@ -11,6 +11,11 @@ export function createBullConnection(): Redis {
   return new Redis(env.REDIS_URL, { maxRetriesPerRequest: null });
 }
 
+/** Connection + key prefix for every BullMQ Queue and Worker. */
+export function bullOptions() {
+  return { connection: createBullConnection(), prefix: env.QUEUE_PREFIX };
+}
+
 /** Shared ioredis client for rate limiting and other app keys. */
 export const redis = createBullConnection();
 

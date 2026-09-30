@@ -102,7 +102,7 @@ describe("lease handling", () => {
     const lease = randomUUID();
     await claimEmail(emailId, lease, -1_000); // already expired
 
-    expect(await expireLeases()).toBeGreaterThanOrEqual(1);
+    expect(await expireLeases()).toContain(emailId);
     const expired = await statusOf(emailId);
     expect(expired?.status).toBe("failed");
     expect(expired?.error).toBe(LEASE_EXPIRED_ERROR);

@@ -113,7 +113,7 @@ Frontend and API on the same site so the session cookie is `SameSite=Lax`. Provi
 | 3–14  | Scheduler, worker, limiter, idempotency, recovery, tests                                                         | done                     |
 | 14–20 | Google login end-to-end, Slack connect/disconnect/alert                                                          | Slack + Bull Board + rate limits done; Google login needs your credentials |
 | 20–32 | Frontend per Figma                                                                                               | built + verified in browser; Figma styling pending access |
-| 32–36 | Elasticsearch indexing + search                                                                                  |                          |
+| 32–36 | Elasticsearch indexing + search                                                                                  | done |
 | 36–40 | Deploy + load script                                                                                             |                          |
 | 40–45 | README + Mermaid diagram + video                                                                                 |                          |
 | 45–48 | Buffer                                                                                                           |                          |

@@ -20,7 +20,13 @@ const envSchema = z.object({
 
   DATABASE_URL: z.string().min(1),
   REDIS_URL: z.string().min(1),
+  // Key prefix for all BullMQ queues; tests use their own so they never touch dev queues.
+  QUEUE_PREFIX: z.string().min(1).default("bull"),
   ELASTICSEARCH_URL: z.url(),
+  ELASTICSEARCH_INDEX: z
+    .string()
+    .regex(/^[a-z0-9][a-z0-9_-]*$/, "must be a lowercase index name")
+    .default("emails"),
 
   SESSION_SECRET: z.string().min(32),
   ENCRYPTION_KEY: z

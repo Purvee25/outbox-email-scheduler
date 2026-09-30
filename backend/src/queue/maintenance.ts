@@ -2,6 +2,7 @@ import type { Job } from "bullmq";
 import { expireLeases, scheduledEmailsAfter } from "../db/email-repo.js";
 import { logger } from "../lib/logger.js";
 import { enqueueEmails, maintenanceQueue } from "./queues.js";
+import { requestIndexing } from "./search-index.js";
 
 const SWEEP_INTERVAL_MS = 60_000;
 const RECONCILE_BATCH_SIZE = 500;
@@ -57,8 +58,13 @@ export async function processMaintenanceJob(job: Job): Promise<void> {
   if (job.name !== LEASE_SWEEP_JOB) return;
   try {
     const expired = await expireLeases();
-    if (expired > 0)
-      logger.warn({ expired }, "expired email leases marked failed");
+    if (expired.length > 0) {
+      logger.warn(
+        { expired: expired.length },
+        "expired email leases marked failed",
+      );
+      await requestIndexing(expired);
+    }
     await reconcileScheduledEmails(new Date(Date.now() - OVERDUE_GRACE_MS));
   } finally {
     await scheduleNextSweep();

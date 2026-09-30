@@ -11,7 +11,8 @@
     "db:generate": "drizzle-kit generate",
     "db:migrate": "tsx --env-file=.env src/db/migrate.ts",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "reindex": "tsx --env-file=.env src/scripts/reindex.ts"
   },
   "dependencies": {
     "@bull-board/api": "^9.10.2",

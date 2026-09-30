@@ -74,11 +74,30 @@ export const EMAIL_TABS = ["scheduled", "sent"] as const;
 export const emailTabSchema = z.enum(EMAIL_TABS);
 export type EmailTab = z.infer<typeof emailTabSchema>;
 
-export const listEmailsQuerySchema = z.object({
-  tab: emailTabSchema,
-  page: z.coerce.number().int().min(1).default(1),
-  pageSize: z.coerce.number().int().min(1).max(100).default(25),
-});
+export const TAB_STATUSES: Record<EmailTab, readonly EmailStatus[]> = {
+  scheduled: ["scheduled", "sending"],
+  sent: ["sent", "failed"],
+};
+
+export const MAX_SEARCH_LENGTH = 200;
+
+export const listEmailsQuerySchema = z
+  .object({
+    tab: emailTabSchema,
+    page: z.coerce.number().int().min(1).default(1),
+    pageSize: z.coerce.number().int().min(1).max(100).default(25),
+    /** Free-text search (Elasticsearch). Empty means "list everything" (MySQL). */
+    q: z.string().trim().max(MAX_SEARCH_LENGTH).optional(),
+    /** Narrows the tab to one of its statuses. */
+    status: emailStatusSchema.optional(),
+  })
+  .refine(
+    (query) => !query.status || TAB_STATUSES[query.tab].includes(query.status),
+    {
+      message: "status does not belong to this tab",
+      path: ["status"],
+    },
+  );
 export type ListEmailsQuery = z.infer<typeof listEmailsQuerySchema>;
 
 export const emailListItemSchema = z.object({

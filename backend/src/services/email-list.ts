@@ -1,31 +1,44 @@
 import { and, asc, count, desc, eq, inArray } from "drizzle-orm";
-import type {
-  EmailStatus,
-  EmailTab,
-  ListEmailsQuery,
-  ListEmailsResponse,
+import {
+  TAB_STATUSES,
+  type ListEmailsQuery,
+  type ListEmailsResponse,
 } from "@scheduler/shared";
 import { db } from "../db/client.js";
 import { campaigns, emails } from "../db/schema.js";
+import { searchEmails } from "../search/search-emails.js";
 
-const TAB_STATUSES: Record<EmailTab, EmailStatus[]> = {
-  scheduled: ["scheduled", "sending"],
-  sent: ["sent", "failed"],
-};
-
-/** Lists the user's emails for a dashboard tab. Always scoped to `userId`. */
+/**
+ * Lists the user's emails for a dashboard tab, always scoped to `userId`.
+ * Free-text queries go to Elasticsearch; plain listing reads MySQL, which is authoritative
+ * and has no indexing lag.
+ */
 export async function listEmails(
   userId: string,
   query: ListEmailsQuery,
 ): Promise<ListEmailsResponse> {
+  const statuses = query.status ? [query.status] : TAB_STATUSES[query.tab];
+  const scheduledTab = query.tab === "scheduled";
+
+  if (query.q) {
+    return searchEmails({
+      userId,
+      text: query.q,
+      statuses,
+      sortField: scheduledTab ? "scheduledAt" : "updatedAt",
+      sortOrder: scheduledTab ? "asc" : "desc",
+      page: query.page,
+      pageSize: query.pageSize,
+    });
+  }
+
   const where = and(
     eq(emails.userId, userId),
-    inArray(emails.status, TAB_STATUSES[query.tab]),
+    inArray(emails.status, [...statuses]),
   );
-  const order =
-    query.tab === "scheduled"
-      ? [asc(emails.scheduledAt)]
-      : [desc(emails.updatedAt)];
+  const order = scheduledTab
+    ? [asc(emails.scheduledAt)]
+    : [desc(emails.updatedAt)];
 
   const [rows, [totals]] = await Promise.all([
     db

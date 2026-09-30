@@ -1,4 +1,4 @@
-import { and, asc, eq, gt, lt, lte, sql } from "drizzle-orm";
+import { and, asc, eq, gt, inArray, lt, lte, sql } from "drizzle-orm";
 import { db } from "./client.js";
 import { campaigns, emails } from "./schema.js";
 
@@ -125,12 +125,17 @@ export async function findEmailForSend(emailId: string) {
  * (at-most-once) rather than risk a duplicate. The lease token is kept so a late worker
  * can still record success via `markSent`.
  */
-export async function expireLeases(now: Date = new Date()): Promise<number> {
-  const [result] = await db
+export async function expireLeases(now: Date = new Date()): Promise<string[]> {
+  const expiredLease = and(eq(emails.status, "sending"), lt(emails.leaseExpiresAt, now));
+  const rows = await db.select({ id: emails.id }).from(emails).where(expiredLease);
+  if (rows.length === 0) return [];
+  const ids = rows.map((row) => row.id);
+  // Re-check the condition in the UPDATE: a worker may have finished since the SELECT.
+  await db
     .update(emails)
     .set({ status: "failed", error: LEASE_EXPIRED_ERROR })
-    .where(and(eq(emails.status, "sending"), lt(emails.leaseExpiresAt, now)));
-  return result.affectedRows;
+    .where(and(inArray(emails.id, ids), expiredLease));
+  return ids;
 }
 
 /** Keyset page of `scheduled` emails, optionally only those due before `dueBefore`. */

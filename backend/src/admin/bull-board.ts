@@ -6,6 +6,7 @@ import {
   maintenanceQueue,
   notificationQueue,
 } from "../queue/queues.js";
+import { searchIndexQueue } from "../queue/search-index.js";
 
 export const BULL_BOARD_PATH = "/admin/queues";
 
@@ -14,9 +15,12 @@ export function createBullBoardRouter() {
   const serverAdapter = new ExpressAdapter();
   serverAdapter.setBasePath(BULL_BOARD_PATH);
   createBullBoard({
-    queues: [emailQueue, notificationQueue, maintenanceQueue].map(
-      (queue) => new BullMQAdapter(queue, { readOnlyMode: true }),
-    ),
+    queues: [
+      emailQueue,
+      notificationQueue,
+      searchIndexQueue,
+      maintenanceQueue,
+    ].map((queue) => new BullMQAdapter(queue, { readOnlyMode: true })),
     serverAdapter,
   });
   return serverAdapter.getRouter();

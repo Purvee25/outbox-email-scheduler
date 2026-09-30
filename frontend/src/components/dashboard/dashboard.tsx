@@ -1,18 +1,21 @@
 "use client";
 
-import { EMAIL_TABS, type EmailTab } from "@scheduler/shared";
+import { EMAIL_TABS, type EmailStatus, type EmailTab } from "@scheduler/shared";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs } from "@/components/ui/tabs";
+import { useDebouncedValue } from "@/hooks/use-debounced-value";
 import { useSession } from "@/hooks/use-session";
 import { ComposeModal } from "./compose-modal";
+import { EmailFilters } from "./email-filters";
 import { EmailTable } from "./email-table";
 import { Header } from "./header";
 
 const TAB_LABELS: Record<EmailTab, string> = { scheduled: "Scheduled Emails", sent: "Sent Emails" };
+const SEARCH_DEBOUNCE_MS = 300;
 const TABS = EMAIL_TABS.map((value) => ({ value, label: TAB_LABELS[value] }));
 
 /** Messages for the ?slack= result the API redirects back with after the Slack OAuth flow. */
@@ -28,7 +31,10 @@ export function Dashboard() {
   const searchParams = useSearchParams();
   const [tab, setTab] = useState<EmailTab>("scheduled");
   const [page, setPage] = useState(1);
+  const [search, setSearch] = useState("");
+  const [status, setStatus] = useState<EmailStatus | undefined>();
   const [composeOpen, setComposeOpen] = useState(false);
+  const debouncedSearch = useDebouncedValue(search.trim(), SEARCH_DEBOUNCE_MS);
 
   const slackResult = searchParams.get("slack");
   useEffect(() => {
@@ -68,15 +74,31 @@ export function Dashboard() {
               value={tab}
               onChange={(next) => {
                 setTab(next);
+                setStatus(undefined); // statuses differ per tab
                 setPage(1);
               }}
             />
           </div>
           <div role="tabpanel">
+            <EmailFilters
+              tab={tab}
+              search={search}
+              onSearchChange={(value) => {
+                setSearch(value);
+                setPage(1);
+              }}
+              status={status}
+              onStatusChange={(value) => {
+                setStatus(value);
+                setPage(1);
+              }}
+            />
             <EmailTable
               tab={tab}
               page={page}
               onPageChange={setPage}
+              search={debouncedSearch}
+              status={status}
               emptyAction={<Button onClick={openCompose}>Compose New Email</Button>}
             />
           </div>

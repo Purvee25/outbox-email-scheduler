@@ -1,6 +1,6 @@
 import { Queue } from "bullmq";
 import { env } from "../config/env.js";
-import { createBullConnection } from "../lib/redis.js";
+import { bullOptions } from "../lib/redis.js";
 
 export const EMAIL_QUEUE = "email-send";
 export const MAINTENANCE_QUEUE = "maintenance";
@@ -21,7 +21,7 @@ export interface EmailJobData {
 export const emailJobId = (emailId: string): string => `email-${emailId}`;
 
 export const emailQueue = new Queue<EmailJobData>(EMAIL_QUEUE, {
-  connection: createBullConnection(),
+  ...bullOptions(),
   defaultJobOptions: {
     attempts: env.MAX_SEND_ATTEMPTS,
     backoff: { type: "exponential", delay: RETRY_BACKOFF_MS },
@@ -31,11 +31,11 @@ export const emailQueue = new Queue<EmailJobData>(EMAIL_QUEUE, {
 });
 
 export const notificationQueue = new Queue(NOTIFICATION_QUEUE, {
-  connection: createBullConnection(),
+  ...bullOptions(),
 });
 
 export const maintenanceQueue = new Queue(MAINTENANCE_QUEUE, {
-  connection: createBullConnection(),
+  ...bullOptions(),
 });
 
 export interface EnqueueableEmail {

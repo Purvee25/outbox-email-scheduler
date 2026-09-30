@@ -16,6 +16,7 @@ import { HOUR_MS } from "../scheduling/plan-sends.js";
 import { acquireSendTurn, reserveSendSlot } from "../scheduling/send-slots.js";
 import { notifyRateLimitHit } from "./notifications.js";
 import type { EmailJobData } from "./queues.js";
+import { requestIndexingSafely } from "./search-index.js";
 
 /** Longer than SMTP timeouts plus lock renewal, so a live worker never loses its lease. */
 export const LEASE_MS = 5 * 60 * 1000;
@@ -65,6 +66,7 @@ export async function processEmailJob(
   if (waitMs > 0) {
     const wakeAt = Date.now() + waitMs;
     await releaseClaim(emailId, leaseToken, { scheduledAt: new Date(wakeAt) });
+    requestIndexingSafely([emailId]);
     await job.updateData({ emailId, reservedAt: sendAt });
     await job.moveToDelayed(wakeAt, token);
     throw new DelayedError();
@@ -80,6 +82,7 @@ export async function processEmailJob(
       text: email.body,
     });
     await markSent(emailId, leaseToken, result);
+    requestIndexingSafely([emailId]);
     logger.info({ emailId, sender: email.sender, attempts }, "email sent");
   } catch (error) {
     await handleSendFailure(job, leaseToken, attempts, error);
@@ -133,11 +136,13 @@ async function handleSendFailure(
 
   if (isPermanentSmtpError(error) || attempts >= env.MAX_SEND_ATTEMPTS) {
     await markFailed(emailId, leaseToken, message);
+    requestIndexingSafely([emailId]);
     logger.error({ emailId, attempts, err: error }, "email failed permanently");
     throw new UnrecoverableError(message);
   }
 
   await releaseClaim(emailId, leaseToken, { error: message });
+  requestIndexingSafely([emailId]);
   logger.warn(
     { emailId, attempts, err: error },
     "email send failed; will retry",
