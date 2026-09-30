@@ -214,30 +214,6 @@ export function Sidebar({
           <span className="flex-1">Analytics</span>
         </button>
       </nav>
-
-      <div className="mt-auto pt-2 border-t border-border">
-        <button
-          type="button"
-          id="logout-btn"
-          onClick={() => logout.mutate()}
-          disabled={logout.isPending}
-          className="flex h-11 w-full items-center gap-3 rounded-control px-3 text-left text-[15px] text-ink-muted transition-colors hover:bg-field disabled:opacity-50"
-        >
-          <svg
-            viewBox="0 0 20 20"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="1.5"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            className="size-5 shrink-0"
-            aria-hidden
-          >
-            <path d="M7.5 10h9m0 0-3-3m3 3-3 3M13 6V4a1 1 0 0 0-1-1H4a1 1 0 0 0-1 1v12a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1v-2" />
-          </svg>
-          <span>{logout.isPending ? "Signing out…" : "Sign out"}</span>
-        </button>
-      </div>
     </aside>
   );
 }
