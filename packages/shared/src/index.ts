@@ -196,6 +196,14 @@ export const emailStatsSchema = z.object({
 });
 export type EmailStats = z.infer<typeof emailStatsSchema>;
 
+export const emailActivityPointSchema = z.object({
+  date: z.string(), // "YYYY-MM-DD"
+  sent: z.number().int(),
+  failed: z.number().int(),
+});
+export const emailActivitySchema = z.array(emailActivityPointSchema);
+export type EmailActivityPoint = z.infer<typeof emailActivityPointSchema>;
+
 export const updateEmailSchema = z
   .object({ starred: z.boolean().optional(), archived: z.boolean().optional() })
   .refine(

@@ -200,10 +200,46 @@ export async function setArchived(
   return result.affectedRows === 1;
 }
 
-/** Per-status counts across all of a user's unarchived emails. */
-export async function getEmailStats(
+/** Daily sent/failed counts for the last N days (UTC dates, most-recent last). */
+export async function getEmailActivity(
   userId: string,
-): Promise<{
+  days = 7,
+): Promise<{ date: string; sent: number; failed: number }[]> {
+  const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+  const rows = await db
+    .select({
+      date: sql<string>`DATE(${emails.updatedAt})`,
+      status: emails.status,
+      total: count(),
+    })
+    .from(emails)
+    .where(
+      and(
+        eq(emails.userId, userId),
+        gt(emails.updatedAt, since),
+        inArray(emails.status, ["sent", "failed"]),
+      ),
+    )
+    .groupBy(sql`DATE(${emails.updatedAt})`, emails.status);
+
+  // Build a full date range with zeros so the chart has no gaps.
+  const map: Record<string, { sent: number; failed: number }> = {};
+  for (let i = days - 1; i >= 0; i--) {
+    const d = new Date(Date.now() - i * 24 * 60 * 60 * 1000);
+    const key = d.toISOString().slice(0, 10);
+    map[key] = { sent: 0, failed: 0 };
+  }
+  for (const row of rows) {
+    const entry = map[row.date];
+    if (entry) {
+      entry[row.status as "sent" | "failed"] = row.total;
+    }
+  }
+  return Object.entries(map).map(([date, counts]) => ({ date, ...counts }));
+}
+
+/** Per-status counts across all of a user's unarchived emails. */
+export async function getEmailStats(userId: string): Promise<{
   scheduled: number;
   sending: number;
   sent: number;

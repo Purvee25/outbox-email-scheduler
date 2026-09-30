@@ -11,6 +11,7 @@ import {
   setArchived,
   deleteEmailRow,
   getEmailStats,
+  getEmailActivity,
   retryEmail,
 } from "../db/email-repo.js";
 import { emailQueue, emailJobId } from "../queue/queues.js";
@@ -27,6 +28,10 @@ export const emailsRouter = Router();
 
 emailsRouter.get("/stats", async (req, res) => {
   res.json(await getEmailStats(currentUserId(req)));
+});
+
+emailsRouter.get("/activity", async (req, res) => {
+  res.json(await getEmailActivity(currentUserId(req)));
 });
 
 emailsRouter.get("/", async (req, res) => {

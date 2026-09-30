@@ -1,6 +1,7 @@
 import {
   createCampaignResponseSchema,
   attachmentSchema,
+  emailActivitySchema,
   emailDetailSchema,
   emailStatsSchema,
   listEmailsResponseSchema,
@@ -92,6 +93,9 @@ export const api = {
 
   getEmailStats: () => requestJson("/api/emails/stats", emailStatsSchema),
 
+  getEmailActivity: () =>
+    requestJson("/api/emails/activity", emailActivitySchema),
+
   retryEmail: async (id: string) => {
     await request(`/api/emails/${id}/retry`, { method: "POST" });
   },
@@ -152,4 +156,5 @@ export const queryKeys = {
   allEmails: ["emails"] as const,
   email: (id: string) => ["emails", "detail", id] as const,
   emailStats: ["emails", "stats"] as const,
+  emailActivity: ["emails", "activity"] as const,
 };
