@@ -272,7 +272,19 @@ export function ComposeView({
       subject,
       body,
       recipients,
-      startAt: (scheduledAt ? new Date(scheduledAt) : new Date()).toISOString(),
+      startAt: (sendMode === "offset"
+        ? new Date(
+            Date.now() +
+              (sendUnit === "seconds"
+                ? sendAmount * 1_000
+                : sendUnit === "minutes"
+                  ? sendAmount * 60_000
+                  : sendAmount * 3_600_000),
+          )
+        : sendMode === "custom" && scheduledAt
+          ? new Date(scheduledAt)
+          : new Date()
+      ).toISOString(),
       delayMs: Math.round(Number(delaySeconds) * 1000),
       hourlyLimit: Number(hourlyLimit),
       attachmentIds: files.map((file) => file.attachment.id),
@@ -403,12 +415,17 @@ export function ComposeView({
       </header>
 
       <div className="flex flex-col gap-5 px-2">
-        {scheduledAt && (
+        {(sendMode === "offset" || (sendMode === "custom" && scheduledAt)) && (
           <p className="text-sm text-ink-muted">
-            Scheduled for {formatDateTime(new Date(scheduledAt).toISOString())}{" "}
+            {sendMode === "offset"
+              ? `Sends in ${sendAmount} ${UNIT_LABELS[sendUnit].toLowerCase()} from Schedule`
+              : `Scheduled for ${formatDateTime(new Date(scheduledAt).toISOString())}`}{" "}
             <button
               type="button"
-              onClick={() => setScheduledAt("")}
+              onClick={() => {
+                setScheduledAt("");
+                setSendMode(null);
+              }}
               className="text-brand-600 hover:underline"
             >
               Clear
@@ -665,18 +682,31 @@ export function ComposeView({
           </div>
 
           {/* Confirmation */}
-          {scheduledAt && (
+          {(sendMode === "offset" ||
+            (sendMode === "custom" && scheduledAt)) && (
             <p className="mt-1.5 pl-32 text-xs text-ink-muted">
-              Sends{" "}
-              <strong className="text-ink">
-                {new Date(scheduledAt).toLocaleString(undefined, {
-                  weekday: "short",
-                  month: "short",
-                  day: "numeric",
-                  hour: "numeric",
-                  minute: "2-digit",
-                })}
-              </strong>
+              {sendMode === "offset" ? (
+                <>
+                  Sends in{" "}
+                  <strong className="text-ink">
+                    {sendAmount} {UNIT_LABELS[sendUnit].toLowerCase()}
+                  </strong>{" "}
+                  from when you click Schedule
+                </>
+              ) : (
+                <>
+                  Sends{" "}
+                  <strong className="text-ink">
+                    {new Date(scheduledAt).toLocaleString(undefined, {
+                      weekday: "short",
+                      month: "short",
+                      day: "numeric",
+                      hour: "numeric",
+                      minute: "2-digit",
+                    })}
+                  </strong>
+                </>
+              )}
             </p>
           )}
           {errors.startAt && (
