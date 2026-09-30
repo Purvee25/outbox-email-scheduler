@@ -556,8 +556,8 @@ export function ComposeView({
                   }}
                   onChange={(e) => {
                     const v = Math.max(
-                      1,
-                      Math.min(Number(e.target.value) || 1, UNIT_MAX[sendUnit]),
+                      0,
+                      Math.min(Number(e.target.value) || 0, UNIT_MAX[sendUnit]),
                     );
                     setSendAmount(v);
                     if (sendMode === "offset")
@@ -567,7 +567,7 @@ export function ComposeView({
                     e.preventDefault();
                     const delta = e.deltaY < 0 ? 1 : -1;
                     const next = Math.max(
-                      1,
+                      0,
                       Math.min(sendAmount + delta, UNIT_MAX[sendUnit]),
                     );
                     setSendAmount(next);
