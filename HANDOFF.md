@@ -1,444 +1,174 @@
 # Handoff — ReachInbox Email Job Scheduler
 
-> **Date:** 30 September 2026
-> **Status:** Code-complete. Blocked on external credentials before a live demo. Run `npm run doctor` for the exact list.
->
-> **Location:** `~/Desktop/outbox`. Docker Compose is pinned to the project name `outbox-email-scheduler` so existing DB volumes keep working.
+> **As of:** 30 September 2026, evening. **Owner:** Purvee Singh (GitHub `Purvee25`).
+> **Repo:** https://github.com/Purvee25/outbox-email-scheduler (private) · **Local:** `~/Desktop/outbox`
+> **Last pushed commit:** `d2e6ce7` on `main`; working tree clean when this was written.
+> **Status in one line:** code-complete and configured for a real demo (Google, Ethereal, Slack, tunnel). What remains is proving it live, recording the demo video, and submitting.
+
+This file is the single source of truth for continuing the work in a new Claude session. Read it top to bottom, then start at **"Where to start"**.
 
 ---
 
-## TL;DR
+## 1. The assignment (what is being built)
 
-Everything the assignment asks for is built, tested, and verified:
+A ReachInbox hiring assignment: a production-grade **email scheduler service + dashboard**.
 
-| Requirement | File / Layer | Verified |
-|---|---|---|
-| Email send API | `POST /api/campaigns` → `services/campaigns.ts` | ✅ 45/45 tests, live DB has 5 558 rows |
-| Schedule at specific time | `scheduling/plan-sends.ts` → BullMQ `moveToDelayed(ts)` | ✅ Verified 40–120 ms accuracy |
-| BullMQ + Redis (no cron) | `queue/` — 4 queues; `worker.ts` | ✅ `grep -r cron` → 0 cron usage |
-| Ethereal Email (fake SMTP) | `mail/transport.ts` → Nodemailer → `smtp.ethereal.email:587` | ✅ Preview URLs stored in DB |
-| Survives restarts | Redis AOF; `maintenance.ts` `reconcileScheduledEmails()` on boot | ✅ Tested with full Redis key wipe |
-| Dashboard: schedule emails | `compose-modal.tsx` | ✅ CSV upload, validation, submit |
-| Dashboard: view scheduled | `email-table.tsx` — "Scheduled" tab, 5 s poll | ✅ |
-| Dashboard: view sent | Same table — "Sent" tab with preview links | ✅ |
+Backend: TypeScript, Express, **BullMQ + Redis** (no cron of any kind), MySQL, **Ethereal** fake SMTP, Elasticsearch search, live BullMQ dashboard, restart-safe and idempotent, configurable worker concurrency, minimum delay between sends, per-sender hourly limit shared across workers (overflow rolls into the next hour), and a **live Slack message when a sender's hourly limit is hit** (real OAuth, per-user, no-op if not connected).
 
-**What blocks the live demo:** Google OAuth credentials, Ethereal sender accounts, and (optionally) a Slack app. All three are generated in external consoles — the code awaits them in `backend/.env`.
+Frontend: Next.js + Tailwind matching the Figma (the user supplied 7 screenshots, treat them as the design source of truth): real Google OAuth, dashboard with Scheduled/Sent, compose (subject, body, lead file upload with count, start time, delay, hourly limit), lists with loading/empty states.
+
+Submission: private GitHub repo with `Mitrajit` and `Yadav036` added as collaborators, README (run steps, Ethereal setup, architecture, features mapped to requirements), demo video (max 5 min: schedule, dashboard, **restart scenario**, bonus rate-limit under load), assumptions/trade-offs, and the ClickUp form: https://forms.clickup.com/9005062261/f/8cbwp3n-8876/6NNNJ92DV93PQTAYST
 
 ---
 
-## Added after the first handoff
+## 2. Progress checklist
 
-- Light green UI matching the design screenshots (sidebar, list rows, full-page compose, Send Later popover).
-- Email detail view (`GET /api/emails/:id`) and body previews on list rows.
-- Rich-text bodies (Tiptap) sanitised server-side; HTML + text sent to recipients.
-- Attachments (upload / download / send), with a stale-upload cleanup in the maintenance sweep.
-- Elasticsearch mapping is upgraded automatically on existing indexes.
-- `npm run doctor` readiness check.
-- Star / archive / delete support was being built in a parallel session; treat it as unfinished until it has tests.
+### Done and verified by automated checks
 
-## Codebase stats
+- [x] Scheduling API, MySQL storage, BullMQ delayed jobs, no cron (grep-verified)
+- [x] Idempotency: atomic claim, deterministic job ids; rebuild from MySQL on boot
+- [x] Configurable concurrency, minimum delay (`MIN_DELAY_MS`, default 2000), per-sender hourly limit (Redis Lua, default 200)
+- [x] Elasticsearch search; mapping now **auto-upgrades existing indexes** (`ensureEmailIndex` uses put-mapping); live index reindexed
+- [x] Bull Board at `/admin/queues` (admin emails only)
+- [x] Slack OAuth + AES-256-GCM encrypted webhook + rate-limit alert notifier (unit tests only, see pending)
+- [x] Light green UI matching the screenshots: login, sidebar with counts, list rows, full-page compose, Send Later popover, email detail
+- [x] Rich-text bodies (Tiptap editor) sanitised server-side (write and read); sent as HTML + text
+- [x] Attachments (upload/download/delete, allow-list, 5 MB each, 10 MB total, max 5), stored in MySQL, sent with the email; stale unclaimed uploads deleted after 24 h by the maintenance sweep
+- [x] `GET /api/emails/:id` (owner-only), body previews on list rows
+- [x] Google sign-in failures now redirect to `/login?error=signin_failed` (was a raw JSON 400)
+- [x] Tests: **backend 65 passing (9 files), frontend 7 passing (3 files)**; typecheck, lint and production build clean
+- [x] `npm run doctor` (scripts/check-env.mjs): reports missing credentials, never prints secrets. **Currently reports "Ready for the demo".**
+- [x] README: run steps, config defaults (2 s min delay, 200/h/sender, concurrency 5), features by requirement, assumptions and trade-offs
+- [x] Pushed to GitHub as `Purvee25`, three commits on top of the original five
 
-| Metric | Value |
-|---|---|
-| Backend source (TypeScript) | 38 files · ~2 350 LoC |
-| Frontend source (TSX + TS) | 28 files · ~1 580 LoC |
-| Shared schemas | 1 file · 122 LoC |
-| Tests | 9 files · ~870 LoC · **45 tests, all passing** |
-| Total application code | **~4 930 LoC** |
-| Git commits | 5 (scaffold → scheduler → slack/admin → frontend → elasticsearch) |
-| npm workspaces | 3 (`packages/shared`, `backend`, `frontend`) |
+### Configured (values live only in git-ignored env files)
 
----
+- [x] Google OAuth client `outbox-web` in project `outbox-scheduler-510214`, consent screen External/Testing, the user's Gmail added as a **test user**
+- [x] Two Ethereal sender accounts; SMTP login verified for both; `MAIL_TRANSPORT=ethereal`
+- [x] Slack app `Outbox Scheduler` in workspace `PURVEE` (Incoming Webhooks on, scope `incoming-webhook`)
+- [x] ngrok free static domain `uncross-untamed-coeditor.ngrok-free.dev`; `ADMIN_EMAILS` set
 
-## Architecture
+### Not yet confirmed (do these next, in order)
 
-```mermaid
-flowchart TD
-    Browser -->|HTTPS| Caddy
-    Caddy -->|"/api, /auth, /admin"| API["Express 5 API"]
-    Caddy -->|"everything else"| FE["Next.js 16"]
+- [ ] **A real Google login through the tunnel** (never confirmed end to end)
+- [ ] **A real send** through Ethereal: preview link opens, dashboard moves Scheduled → Sent
+- [ ] **Slack "Connect Slack" + "Send test"** posting into the channel
+- [ ] **A real hourly-limit alert** in Slack (compose with hourly limit 1 and ~4 recipients)
+- [ ] Visual check of every screen against the 7 Figma screenshots (login, list, sent, detail, compose, Send Later, upload list)
+- [ ] Restart scenario rehearsal (stop API + worker, start again, future emails still send)
 
-    API --> MySQL[(MySQL 8)]
-    API --> Redis[(Redis 7)]
-    API --> ES[(Elasticsearch 8)]
+### Remaining submission tasks (the user does these, or asks explicitly)
 
-    API -->|"enqueue delayed jobs"| BullMQ
-    BullMQ --> Redis
-    BullMQ -->|wake| W1["Worker 1"]
-    BullMQ -->|wake| W2["Worker 2"]
-
-    W1 & W2 --> MySQL
-    W1 & W2 -->|"Lua slot reservation"| Redis
-    W1 & W2 -->|SMTP| Ethereal
-    W1 & W2 -->|upsert| ES
-    W1 & W2 -->|webhook| Slack
-```
-
-### Key design choices
-
-| Decision | Rationale |
-|---|---|
-| MySQL as source of truth, not Redis | Atomic `UPDATE … WHERE status='scheduled'` for idempotent claims; no distributed lock library needed. |
-| Redis AOF + reconciliation on boot | BullMQ jobs survive restarts. If Redis dies, worker boot re-enqueues every `scheduled` row from MySQL. |
-| Lua-script slot reservation | One `EVALSHA` per job reserves the next free send time, enforcing the per-sender hourly cap. No polling, no thundering herd. |
-| `moveToDelayed()` instead of `sleep()` | Worker never blocks a thread. Future slots re-queue the job into BullMQ's delayed set. |
-| At-most-once on expired leases | Ethereal has no idempotency key. A timed-out `sending` row is marked `failed` — we prefer one missed send over a duplicate. |
-| Separate notification queue | A failing Slack webhook never blocks email sending. |
-| Session cookie (not JWT) | Real server-side logout and revocation. `httpOnly`, `SameSite=Lax`, `secure` in prod. |
+- [ ] Add reviewers `Mitrajit` and `Yadav036` (repo Settings → Collaborators)
+- [ ] Record the demo video (script in README, section "Demo script")
+- [ ] Add the user's own 2-line intro at the top of the README (plagiarism review is mentioned in the brief)
+- [ ] Submit the ClickUp form
+- [ ] Optional: deploy (Railway guide in `docs/railway.md`, or the Caddy compose file); the Caddyfile still has a `YOUR_DOMAIN` placeholder
 
 ---
 
-## Directory map
+## 3. How the local environment is wired right now
 
-```
-outbox-email-scheduler/
-├── packages/shared/src/index.ts   ← Zod schemas + TS types shared by API and frontend
-│
-├── backend/
-│   ├── src/
-│   │   ├── app.ts                 ← Express setup: helmet, CORS, session, routes
-│   │   ├── server.ts              ← HTTP listen
-│   │   ├── worker.ts              ← BullMQ workers × 4 queues, reconciliation, shutdown
-│   │   ├── config/env.ts          ← Zod-validated environment vars
-│   │   ├── db/
-│   │   │   ├── client.ts          ← mysql2 pool + Drizzle instance
-│   │   │   ├── schema.ts          ← users, campaigns, emails, slack_connections
-│   │   │   ├── email-repo.ts      ← claim / release / markSent / markFailed / list queries
-│   │   │   └── migrate.ts         ← Drizzle migrator (runs once)
-│   │   ├── auth/google.ts         ← Google OAuth: PKCE + state, session create/destroy
-│   │   ├── routes/
-│   │   │   ├── campaigns.ts       ← POST /api/campaigns, GET /api/emails
-│   │   │   ├── me.ts              ← GET /api/me (current user + Slack status)
-│   │   │   └── slack.ts           ← GET /api/slack/connect, callback, DELETE
-│   │   ├── services/
-│   │   │   ├── campaigns.ts       ← createCampaign: validate → plan → insert → enqueue
-│   │   │   └── email-list.ts      ← listEmails: MySQL or Elasticsearch depending on ?q=
-│   │   ├── scheduling/
-│   │   │   ├── plan-sends.ts      ← planSends(): slot formula, dedup, hourly-limit windows
-│   │   │   └── send-slots.ts      ← Lua scripts: reserveSendSlot(), acquireSendTurn()
-│   │   ├── queue/
-│   │   │   ├── queues.ts          ← Queue declarations + enqueueEmails()
-│   │   │   ├── email-processor.ts ← processEmailJob: claim → reserve → turn → send → mark
-│   │   │   ├── maintenance.ts     ← Lease sweep + reconcileScheduledEmails()
-│   │   │   ├── notifications.ts   ← Slack webhook poster (rate-limit alerts)
-│   │   │   └── search-index.ts    ← Elasticsearch upsert queue
-│   │   ├── search/
-│   │   │   ├── client.ts          ← ES client + index mapping
-│   │   │   └── indexer.ts         ← bulk upsert from MySQL → ES
-│   │   ├── mail/
-│   │   │   ├── senders.ts         ← Parse ETHEREAL_SENDERS env var
-│   │   │   └── transport.ts       ← Nodemailer send + preview URL
-│   │   ├── slack/slack.ts         ← OAuth flow, AES-256-GCM encrypt/decrypt, disconnect
-│   │   ├── admin/bull-board.ts    ← Bull Board at /admin/queues
-│   │   ├── middleware/
-│   │   │   ├── auth.ts            ← requireAuth, requireAdmin, requireTrustedOrigin
-│   │   │   └── rate-limit.ts      ← Redis-backed rate limiters
-│   │   ├── lib/
-│   │   │   ├── redis.ts           ← ioredis + redis (session store)
-│   │   │   ├── logger.ts          ← pino
-│   │   │   ├── http-error.ts      ← HttpError class
-│   │   │   ├── crypto.ts          ← AES-256-GCM encrypt/decrypt
-│   │   │   └── validate.ts        ← parseOrThrow (zod → 422)
-│   │   ├── scripts/reindex.ts     ← CLI: rebuild ES index from MySQL
-│   │   └── types/                 ← express-session augmentation
-│   ├── test/
-│   │   ├── helpers.ts + setup.ts  ← Test DB setup, fake sessions
-│   │   ├── search.test.ts         ← Elasticsearch query correctness (6 tests)
-│   │   ├── slack.test.ts          ← Slack webhook + encrypt/decrypt (9 tests)
-│   │   ├── access-control.test.ts ← Cross-user isolation (6 tests)
-│   │   ├── email-repo.test.ts     ← Claim/release/mark DB ops (6 tests)
-│   │   ├── send-slots.test.ts     ← Lua reservation correctness (8 tests)
-│   │   ├── plan-sends.test.ts     ← Slot formula edge cases (6 tests)
-│   │   └── crypto.test.ts         ← AES round-trip (4 tests)
-│   ├── drizzle/                   ← SQL migrations (0000_init, 0001_slack_access_token)
-│   └── Dockerfile                 ← Multi-target: api + worker
-│
-├── frontend/
-│   ├── src/
-│   │   ├── app/
-│   │   │   ├── layout.tsx         ← Root layout: Inter font, Providers
-│   │   │   ├── globals.css        ← Dark design tokens, animations, glass utilities
-│   │   │   ├── providers.tsx      ← React Query + Sonner toast
-│   │   │   ├── page.tsx           ← / → redirect to /dashboard
-│   │   │   ├── login/page.tsx     ← Google OAuth login (SSR)
-│   │   │   └── dashboard/page.tsx ← Suspense wrapper
-│   │   ├── components/
-│   │   │   ├── dashboard/
-│   │   │   │   ├── dashboard.tsx  ← Main dashboard: tabs, search, table, compose
-│   │   │   │   ├── header.tsx     ← Sticky glassmorphism nav
-│   │   │   │   ├── email-table.tsx ← DataTable + polling + pagination
-│   │   │   │   ├── email-filters.tsx ← Search input + status dropdown
-│   │   │   │   ├── compose-modal.tsx ← Campaign form: CSV upload, validation
-│   │   │   │   └── slack-control.tsx ← Connect/disconnect Slack
-│   │   │   └── ui/               ← Button, Modal, Field, DataTable, Tabs, StatusBadge, etc.
-│   │   ├── hooks/
-│   │   │   ├── use-session.ts     ← React Query: GET /api/me → redirect if 401
-│   │   │   └── use-debounced-value.ts
-│   │   └── lib/
-│   │       ├── api.ts             ← Typed API client: fetch + zod runtime validation
-│   │       ├── cn.ts              ← Class merger
-│   │       ├── format.ts          ← Date formatting
-│   │       └── leads.ts           ← PapaParse CSV → email[]
-│   ├── Dockerfile                 ← Next.js standalone build
-│   └── next.config.ts             ← transpilePackages + standalone output
-│
-├── scripts/load-test.mjs          ← 1 000-email load-test script
-├── docker-compose.yml             ← Local dev: MySQL, Redis, Elasticsearch
-├── docker-compose.prod.yml        ← Full production stack + Caddy
-├── Caddyfile                      ← HTTPS reverse proxy
-├── docs/railway.md                ← Railway deployment guide
-├── README.md                      ← Full project documentation
-├── PLAN.md                        ← Working plan with timeline
-└── .env.example                   ← All env vars documented
-```
+### Tunnel mode (important, non-obvious)
 
----
+Slack requires an **HTTPS** redirect URL, and the session cookie belongs to a host, so the whole app is served through one HTTPS origin:
 
-## What is done ✅
+- Browser → `https://uncross-untamed-coeditor.ngrok-free.dev` → ngrok → Next.js on `:3000`
+- Next.js proxies `/api`, `/auth`, `/admin`, `/health` to the API on `:4000` (opt-in `rewrites()` in `frontend/next.config.ts`, enabled by `API_PROXY_TARGET`)
+- **Log in only through the tunnel address**, not `localhost:3000`.
 
-### Backend
-- [x] Express 5 API with zod validation, helmet, CORS, body limit
-- [x] Google OAuth (PKCE + state, session cookie, real logout)
-- [x] `POST /api/campaigns` — up to 5 000 recipients, deduped, transactional insert
-- [x] `GET /api/emails?tab=&page=&q=&status=` — MySQL listing + Elasticsearch search
-- [x] BullMQ delayed jobs per email, `jobId = "email-<uuid>"` (idempotent)
-- [x] Worker: claim → Lua reserve → send turn → SMTP → mark → index
-- [x] Per-sender hourly rate limit via Redis Lua script
-- [x] Restart recovery: reconcile `scheduled` rows without Redis jobs on boot
-- [x] Lease sweep: self-rescheduling BullMQ job (no cron)
-- [x] Ethereal SMTP with `getTestMessageUrl` preview links
-- [x] `MAIL_TRANSPORT=log` mode for load tests (no SMTP, still rate-limits)
-- [x] Slack OAuth + AES-256-GCM encrypted webhook + rate-limit alerts
-- [x] Bull Board at `/admin/queues` (admin-only)
-- [x] Redis-backed rate limiters (auth, compose)
-- [x] Elasticsearch indexing (separate queue, graceful degradation)
-- [x] `npm run reindex` rebuilds ES from MySQL
+Settings (URLs only, no secrets):
 
-### Frontend
-- [x] Next.js 16 App Router + React Query + Tailwind CSS 4
-- [x] Dark-mode premium design: glassmorphism, animations, gradient text
-- [x] Login page with Google OAuth button
-- [x] Dashboard with Scheduled / Sent tabs (5 s auto-refresh)
-- [x] Free-text search (Elasticsearch)
-- [x] Status filter dropdown
-- [x] Pagination
-- [x] Compose modal: subject, body, CSV upload (PapaParse), start time, delay, limit
-- [x] Status badges: scheduled (blue), sending (amber, pulsing), sent (green), failed (red)
-- [x] Slack connect / disconnect
-- [x] Toast notifications (sonner)
-- [x] Responsive layout
+- `backend/.env`: `FRONTEND_ORIGIN` and `API_PUBLIC_URL` = the tunnel URL
+- `frontend/.env.local`: `NEXT_PUBLIC_API_URL=` (empty on purpose), `API_PROXY_TARGET=http://localhost:4000`, `DEV_TUNNEL_HOST=uncross-untamed-coeditor.ngrok-free.dev`
+- Google redirect URIs on the client: `http://localhost:4000/auth/google/callback` and `https://uncross-untamed-coeditor.ngrok-free.dev/auth/google/callback`
+- Slack redirect URL: `https://uncross-untamed-coeditor.ngrok-free.dev/api/slack/callback`
 
-### Infrastructure
-- [x] Docker Compose: MySQL 8 + Redis 7 (AOF) + Elasticsearch 8
-- [x] Backend Dockerfile (multi-target: `api` + `worker`)
-- [x] Frontend Dockerfile (standalone build)
-- [x] Production Compose with Caddy auto-HTTPS
-- [x] Railway deployment guide
+To go back to plain localhost: set `FRONTEND_ORIGIN=http://localhost:3000`, `API_PUBLIC_URL=http://localhost:4000`, `NEXT_PUBLIC_API_URL=http://localhost:4000`, remove the two proxy variables, restart API and frontend.
 
-### Testing
-- [x] 45 tests across 7 test files, all passing
-- [x] End-to-end scenarios: normal send, worker crash, Redis wipe, hourly limit, 30-email burst
-- [x] Load-test script: 1 000 emails at low limit
+### Secrets
 
----
+Only in `backend/.env` and `frontend/.env.local` (both git-ignored; `git check-ignore` confirmed). **Never paste them into chat.** `.env.example` documents every variable. Note: Slack's Client ID had a stray trailing space once; `npm run doctor` and a length check catch that kind of thing.
 
-## What is NOT done ❌ (all credential-gated — not code)
-
-| Item | What you need to do | Time |
-|---|---|---|
-| **Google login (end-to-end)** | Go to [Google Cloud Console](https://console.cloud.google.com) → APIs & Services → Credentials → Create OAuth 2.0 Client (Web). Authorized redirect URI: `http://localhost:4000/auth/google/callback` (dev) or your production URL. Paste `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` into `backend/.env`. | 5 min |
-| **Ethereal accounts** | Go to [ethereal.email/create](https://ethereal.email/create) × 2–3 times. Copy user:pass pairs into `ETHEREAL_SENDERS` in `backend/.env`, e.g. `user1@ethereal.email:pass1,user2@ethereal.email:pass2`. Set `MAIL_TRANSPORT=ethereal`. | 3 min |
-| **Admin access** | Add your Google email to `ADMIN_EMAILS` in `backend/.env`. This unlocks Bull Board at `/admin/queues`. | 30 sec |
-| **Slack app** (optional) | Go to [api.slack.com/apps](https://api.slack.com/apps) → Create New App → OAuth & Permissions → add `incoming-webhook` scope. Redirect URL: `https://<your-api>/api/slack/callback` (needs HTTPS — deploy first, or use ngrok). Paste `SLACK_CLIENT_ID` and `SLACK_CLIENT_SECRET`. | 10 min |
-| **Deploy** | Follow `docs/railway.md` or use `docker-compose.prod.yml`. | 15 min |
-| **Figma styling** | UI works but hasn't been matched to a Figma file. Share screenshots or give view access — it's a token update in `globals.css`. | Variable |
-| **Reviewer invites** | Invite reviewers to the GitHub repo. | 1 min |
-| **Demo video** | Record the demo script in the README once the deployed app has real logins working. | 15 min |
-
----
-
-## Step-by-step: from checkout to running
-
-### Local development (5 min)
+### Start everything
 
 ```bash
-# 1. Clone
-git clone <repo-url>
-cd outbox-email-scheduler
+cd ~/Desktop/outbox
+docker compose up -d                 # MySQL :3307, Redis :6379, Elasticsearch :9200
+npm run dev:api                      # terminal 1  → :4000
+npm run dev:worker                   # terminal 2
+npm run dev -w frontend              # terminal 3  → :3000
+ngrok http --url=https://uncross-untamed-coeditor.ngrok-free.dev 3000   # terminal 4
+npm run doctor                       # should say "Ready for the demo"
+```
 
-# 2. Install
-npm install
+Env changes need an API/worker restart (`tsx watch` does not reload `.env`). ngrok shows a "Visit Site" warning page on first visit.
 
-# 3. Start infrastructure
-docker compose up -d
-# → MySQL :3307, Redis :6379, Elasticsearch :9200
+Docker Compose is pinned to project name `outbox-email-scheduler` so the existing DB volumes still attach after the folder was moved and renamed.
 
-# 4. Configure
-cp .env.example backend/.env
-# Edit backend/.env — at minimum:
-#   SESSION_SECRET=<openssl rand -hex 32>
-#   ENCRYPTION_KEY=<openssl rand -hex 32>
-#   GOOGLE_CLIENT_ID=<from Google Cloud Console>
-#   GOOGLE_CLIENT_SECRET=<from Google Cloud Console>
-#   ADMIN_EMAILS=you@gmail.com
-#   MAIL_TRANSPORT=log          ← works without Ethereal accounts
+### Useful commands
 
-# 5. Migrate
+```bash
+npm run test            # backend 65 + frontend 7
+npm run typecheck       # all workspaces
+npm run lint -w frontend
+npm run reindex         # rebuild Elasticsearch from MySQL (idempotent)
 npm run db:migrate -w backend
-
-# 6. Run (3 terminals)
-npm run dev:api           # → http://localhost:4000
-npm run dev:worker        # Worker process
-npm run dev -w frontend   # → http://localhost:3000
-```
-
-### Production (15 min)
-
-See `docs/railway.md` for Railway, or:
-
-```bash
-cp .env.example .env.production
-# Fill ALL values, including MYSQL_ROOT_PASSWORD, MYSQL_PASSWORD
-# Edit Caddyfile — replace YOUR_DOMAIN
-
-docker compose -f docker-compose.prod.yml --env-file .env.production up -d
-# Scale to 2 workers for demo:
-docker compose -f docker-compose.prod.yml --env-file .env.production \
-  up -d --scale worker=2
+node scripts/load-test.mjs --help   # 1000-email load test
 ```
 
 ---
 
-## API reference
+## 4. Architecture in brief
 
-| Method | Path | Auth | Description |
-|---|---|---|---|
-| `GET` | `/health` | — | MySQL + Redis liveness check |
-| `GET` | `/auth/google` | — | Start Google OAuth flow |
-| `GET` | `/auth/google/callback` | — | OAuth callback (sets session cookie) |
-| `POST` | `/auth/logout` | ✓ | Destroy session |
-| `GET` | `/api/me` | ✓ | Current user + Slack connection status |
-| `POST` | `/api/campaigns` | ✓ | Schedule a campaign (body: subject, body, recipients[], startAt, delayMs, hourlyLimit) |
-| `GET` | `/api/emails?tab&page&pageSize&q&status` | ✓ | List / search emails |
-| `GET` | `/api/slack/connect` | ✓ | Start Slack OAuth |
-| `GET` | `/api/slack/callback` | ✓ | Slack OAuth callback |
-| `DELETE` | `/api/slack` | ✓ | Disconnect Slack |
-| `GET` | `/admin/queues` | ✓ admin | Bull Board |
+Monorepo (npm workspaces): `packages/shared` (zod schemas/types used by API and UI), `backend` (Express 5, Drizzle/MySQL, BullMQ workers), `frontend` (Next.js 16, React Query, Tailwind 4, Tiptap).
+
+- **Source of truth is MySQL.** Redis holds jobs; on boot the worker re-enqueues every `scheduled` row missing a job (`reconcileScheduledEmails`).
+- **One BullMQ delayed job per email**, `jobId = email-<uuid>` (duplicate adds are ignored).
+- **Worker per job:** atomic claim (`UPDATE … WHERE status='scheduled'`) → Lua slot reservation (per-sender hourly cap + min gap) → send turn → Nodemailer → mark sent → index in Elasticsearch. Future slots use `moveToDelayed`, never `sleep`.
+- **At-most-once on crash:** a `sending` row past its lease is marked `failed`, because SMTP has no idempotency key. Documented trade-off.
+- **Fixed hourly window:** up to 2x the limit can fire around an hour boundary. Documented; left as is.
+- **Maintenance sweep** is a self-rescheduling delayed job (lease expiry, reconcile, stale attachment cleanup). No cron.
+- Full detail: README sections "Scheduling algorithm", "Worker flow", "Restart & recovery", "Behaviour under load".
 
 ---
 
-## Queues
+## 5. Known quirks and open questions (read before changing things)
 
-| Queue | Purpose | Concurrency |
-|---|---|---|
-| `email-send` | Delayed email sends | `WORKER_CONCURRENCY` (default 5) |
-| `maintenance` | Lease sweep + reconciliation | 1 |
-| `notifications` | Slack webhook posts | 1 |
-| `search-index` | Elasticsearch upserts | 1 |
-
----
-
-## Database tables
-
-| Table | Key columns | Notes |
-|---|---|---|
-| `users` | `id`, `google_id` (unique), `email`, `name` | Created on first Google login |
-| `campaigns` | `id`, `user_id`, `subject`, `body`, `start_at`, `delay_ms`, `hourly_limit` | One row per campaign |
-| `emails` | `id`, `campaign_id`, `recipient`, `sender`, `status`, `scheduled_at`, `sent_at`, `lease_token`, `lease_expires_at` | One row per recipient; unique (`campaign_id`, `recipient`); index on (`user_id`, `status`, `scheduled_at`) |
-| `slack_connections` | `user_id` (unique), `webhook_url_enc`, `channel`, `team_name` | Webhook encrypted with AES-256-GCM |
+1. **Schema oddity.** `backend/src/db/schema.ts` and migrations `0003_swift_sleepwalker` / `0004_petite_songbird` add `starred`, `archived` (boolean), `archived_at` and `deleted_at` to `emails`. `0003` (with the boolean `archived`) was generated by a parallel session working in the same folder; Elasticsearch and list queries use it. **Do not clean it up without deciding on purpose** which of `archived` (boolean) and `archived_at` is canonical. Both columns exist in the dev database.
+2. **Star / archive / delete are unfinished.** Endpoints exist (`PUT /api/emails/:id/star`, `PUT /api/emails/:id/archive`, `DELETE /api/emails/:id`) and the detail view has Star/Archive buttons, but **there are no tests for them** and delete semantics (hard vs soft, cancelling a scheduled job) were not reviewed. They are not required by the assignment. Either add tests or remove them before submission.
+3. **Email/password login is not implemented.** The login form's fields are deliberately disabled (only Google OAuth exists). The assignment only requires Google.
+4. **Two sessions edited this folder at once** at one point, and the folder was moved (`~/outbox-email-scheduler` → `~/Desktop/outbox`). If something looks changed unexpectedly, check `git diff` and `git log` first.
+5. **Dev database contents.** About 5.5k email rows from earlier load tests, including about 2.5k scheduled with dates in 2027–2038 (nothing will send). A few old `sending` rows get marked `failed` by the lease sweep. Harmless, but do not be surprised in the UI.
+6. **Slack** code paths are covered by unit tests only; nothing has been observed live yet.
+7. **Attachments in MySQL** are re-read per send. Fine for a demo, heavy for 1000+ recipients with large files (documented).
+8. Frontend has only 7 unit tests; backend coverage is much stronger.
+9. Next.js here is a newer major version than usual; `frontend/AGENTS.md` says to check `node_modules/next/dist/docs/` before relying on memory of its APIs.
 
 ---
 
-## Environment variables
+## 6. Working agreements with the user
 
-See `.env.example` for all variables. Critical ones:
-
-| Variable | Required | Notes |
-|---|---|---|
-| `DATABASE_URL` | ✓ | `mysql://user:pass@host:port/db` |
-| `REDIS_URL` | ✓ | `redis://host:6379` |
-| `ELASTICSEARCH_URL` | ✓ | `http://host:9200` |
-| `SESSION_SECRET` | ✓ | ≥ 32 chars; `openssl rand -hex 32` |
-| `ENCRYPTION_KEY` | ✓ | 64 hex chars (32 bytes); `openssl rand -hex 32` |
-| `GOOGLE_CLIENT_ID` | for login | Google Cloud Console |
-| `GOOGLE_CLIENT_SECRET` | for login | Google Cloud Console |
-| `ETHEREAL_SENDERS` | for real SMTP | `user:pass,user:pass` from ethereal.email |
-| `MAIL_TRANSPORT` | — | `ethereal` (default) or `log` (skip SMTP) |
-| `ADMIN_EMAILS` | for Bull Board | Comma-separated emails |
-| `WORKER_CONCURRENCY` | — | Default: 5 |
-| `MIN_DELAY_MS` | — | Default: 2000 (gap between sends per sender) |
-| `MAX_EMAILS_PER_HOUR_PER_SENDER` | — | Default: 200 |
+- **Do not push to GitHub unless explicitly asked.** The user pushes or says so. (One explicit push was done for the current state.)
+- Commits are authored as `Purvee Singh <162358925+Purvee25@users.noreply.github.com>` (already the global git identity). **No `Co-Authored-By: Claude` trailer** on this repo; the user wants Purvee25 as the only contributor.
+- The GitHub account connected to the _previous_ Claude account was not the user's. Use plain `git`/`gh` with the machine's own login (`Purvee25`); do not use a GitHub connector unless it is confirmed to be the user's account.
+- Do not create accounts, enter passwords/secrets, or click through OAuth consent for the user. Give steps; the user does them. Never ask the user to paste secrets into chat.
+- Style: minimal diffs, conventional commits, answer first and keep it short, verify with real commands before claiming something works. Mark unverified things as unverified.
 
 ---
 
-## Running tests
+## 7. Where to start (in order)
 
-```bash
-npm test                     # all workspaces
-npm run test -w backend      # backend only (vitest)
-npm run typecheck            # all 3 workspaces
-```
-
-All 45 tests pass against the running Docker infra (MySQL, Redis, Elasticsearch).
-
----
-
-## Load test
-
-```bash
-node scripts/load-test.mjs \
-  --api          http://localhost:4000 \
-  --cookie       "sid=<value from DevTools>" \
-  --count        1000 \
-  --hourly-limit 10 \
-  --delay        2000
-```
-
-What to watch:
-- Dashboard → "Scheduled" tab fills with 1 000 rows instantly
-- Bull Board → delayed jobs
-- After ~10 sends per sender, Slack fires the hourly-limit alert
-- Overflow emails show `scheduled_at` in the next hour window
-- With 2 workers: `MAX(attempts)` stays 1, zero duplicates
+1. `cd ~/Desktop/outbox && git status && git log --oneline | head` (expect clean, HEAD `d2e6ce7`).
+2. Start the four processes (section 3), run `npm run doctor`, then `npm run test` (expect 65 + 7 passing).
+3. With the user: incognito window → the tunnel URL → **Login with Google once** → dashboard. If sign-in fails, check the terminal running `dev:api`; failures are logged as `google sign-in failed` with the reason.
+4. **Connect Slack** from the sidebar user card → **Send test** → confirm the message appears.
+5. Compose a small campaign (2 recipients, 3 s delay) and watch it send; open the **Preview** link. Then hourly limit 1 with ~4 recipients to trigger the live Slack alert.
+6. Decide on star/archive/delete (test it or remove it), then fix anything found while comparing screens with the Figma screenshots.
+7. Rehearse the restart scenario, record the video, add the README intro, invite the reviewers, submit the form.
 
 ---
 
-## Known trade-offs (documented)
+## 8. Prompt to paste into the new session
 
-1. **Fixed-window hourly counter** — up to 2× the limit can fire around an `XX:00:00` hour boundary. A sliding window would fix this but adds significant complexity for a demo.
-2. **At-most-once delivery on lease expiry** — if a worker dies mid-SMTP-send, the email is marked `failed` rather than retried. Ethereal has no dedup key, so we prefer missing one send over sending it twice.
-3. **No SSE / WebSocket** — the dashboard polls every 5 s. For a 48 h assignment scope, polling is simpler and sufficient.
-4. **No campaign cancel/reschedule** — listed as "cut" in the plan.
-5. **No `{{name}}` personalization** — listed as "cut" in the plan.
-
----
-
-## Demo script (for video recording)
-
-1. Open the app. Log in with Google.
-2. Compose modal → paste a CSV of 20 recipients, subject "Demo", start 1 min from now, delay 3 s, hourly limit 5. Submit.
-3. Dashboard "Scheduled" tab — 20 rows appear instantly.
-4. Wait. Watch rows flip to "Sent". Click a preview URL → Ethereal shows the full email.
-5. **Stop** both the API and worker processes.
-6. **Restart** both. Future emails still send (Redis AOF persisted). Past-due emails send immediately (reconciliation).
-7. Run load test: `node scripts/load-test.mjs --count 1000 --hourly-limit 10`.
-8. Bull Board → delayed tab fills up. After ~10 sends, Slack alert fires.
-9. Scale worker to 2 replicas.
-10. SQL check: `SELECT status, COUNT(*) FROM emails GROUP BY status` → zero duplicates.
-
----
-
-## Fastest path to "done"
-
-| Step | Action | Time |
-|---|---|---|
-| 1 | Fill in `GOOGLE_CLIENT_ID` + `SECRET` → login works | 5 min |
-| 2 | Fill in `ETHEREAL_SENDERS` → real preview URLs | 3 min |
-| 3 | Set `ADMIN_EMAILS` → Bull Board access | 30 sec |
-| 4 | `npm run dev:api` + `dev:worker` + `dev` → test everything | 2 min |
-| 5 | Deploy (Railway or docker-compose.prod) → HTTPS URL | 15 min |
-| 6 | Create Slack app with HTTPS redirect → Slack alerts work | 10 min |
-| 7 | Record demo video | 15 min |
-| 8 | Push to GitHub + invite reviewers | 1 min |
-
-**Total: ~50 minutes from right now to fully submitted.**
+> I'm continuing a project in `~/Desktop/outbox` (repo `Purvee25/outbox-email-scheduler`). Read `HANDOFF.md` fully first. Then run `git status`, start the servers as described in section 3, and run `npm run doctor` and `npm run test`. Follow section 7. Rules: don't push unless I ask, no Claude co-author trailer, never ask me to paste secrets, and tell me clearly what is verified versus unverified. Begin by confirming the current state and then guide me through the Google login and Slack connect test through the ngrok tunnel.
