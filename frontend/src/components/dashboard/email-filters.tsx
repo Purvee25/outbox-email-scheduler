@@ -56,7 +56,7 @@ export function EmailFilters({
         <input
           type="search"
           aria-label="Search emails"
-          placeholder="Search"
+          placeholder="Search by recipient, subject or body…"
           value={search}
           maxLength={MAX_SEARCH_LENGTH}
           onChange={(event) => onSearchChange(event.target.value)}

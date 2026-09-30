@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
 import { useSession } from "@/hooks/use-session";
+import { CampaignStats } from "./campaign-stats";
 import { ComposeView } from "./compose-view";
 import { EmailDetail } from "./email-detail";
 import { EmailFilters } from "./email-filters";
@@ -93,6 +94,7 @@ export function Dashboard() {
         onCompose={openCompose}
       />
       <main className="animate-fade-up min-w-0 flex-1 px-4 py-4 md:pr-6">
+        <CampaignStats />
         <EmailFilters
           tab={tab}
           search={search}

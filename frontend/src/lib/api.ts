@@ -2,6 +2,7 @@ import {
   createCampaignResponseSchema,
   attachmentSchema,
   emailDetailSchema,
+  emailStatsSchema,
   listEmailsResponseSchema,
   meResponseSchema,
   type CreateCampaignInput,
@@ -10,7 +11,8 @@ import {
 } from "@scheduler/shared";
 import type { z } from "zod";
 
-export const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000";
+export const API_URL =
+  process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000";
 
 /** Full-page navigations (OAuth redirects) rather than fetches. */
 export const googleLoginUrl = `${API_URL}/auth/google`;
@@ -36,21 +38,38 @@ export class ApiError extends Error {
   }
 }
 
-async function request(path: string, init: RequestInit = {}): Promise<Response> {
+async function request(
+  path: string,
+  init: RequestInit = {},
+): Promise<Response> {
   const response = await fetch(`${API_URL}${path}`, {
     ...init,
     credentials: "include",
-    headers: { ...(typeof init.body === "string" ? { "content-type": "application/json" } : {}), ...init.headers },
+    headers: {
+      ...(typeof init.body === "string"
+        ? { "content-type": "application/json" }
+        : {}),
+      ...init.headers,
+    },
   });
   if (!response.ok) {
-    const body = (await response.json().catch(() => null)) as { error?: string } | null;
-    throw new ApiError(response.status, body?.error ?? `Request failed (${response.status})`);
+    const body = (await response.json().catch(() => null)) as {
+      error?: string;
+    } | null;
+    throw new ApiError(
+      response.status,
+      body?.error ?? `Request failed (${response.status})`,
+    );
   }
   return response;
 }
 
 /** Fetches JSON and validates it at runtime against the shared schema. */
-async function requestJson<T extends z.ZodType>(path: string, schema: T, init?: RequestInit): Promise<z.infer<T>> {
+async function requestJson<T extends z.ZodType>(
+  path: string,
+  schema: T,
+  init?: RequestInit,
+): Promise<z.infer<T>> {
   const response = await request(path, init);
   return schema.parse(await response.json());
 }
@@ -59,7 +78,11 @@ export const api = {
   me: () => requestJson("/api/me", meResponseSchema),
 
   listEmails: ({ tab, page, pageSize, q, status }: ListEmailsParams) => {
-    const params = new URLSearchParams({ tab, page: String(page), pageSize: String(pageSize) });
+    const params = new URLSearchParams({
+      tab,
+      page: String(page),
+      pageSize: String(pageSize),
+    });
     if (q) params.set("q", q);
     if (status) params.set("status", status);
     return requestJson(`/api/emails?${params}`, listEmailsResponseSchema);
@@ -67,10 +90,19 @@ export const api = {
 
   getEmail: (id: string) => requestJson(`/api/emails/${id}`, emailDetailSchema),
 
+  getEmailStats: () => requestJson("/api/emails/stats", emailStatsSchema),
+
+  retryEmail: async (id: string) => {
+    await request(`/api/emails/${id}/retry`, { method: "POST" });
+  },
+
   uploadAttachment: (file: File) => {
     const form = new FormData();
     form.append("file", file);
-    return requestJson("/api/attachments", attachmentSchema, { method: "POST", body: form });
+    return requestJson("/api/attachments", attachmentSchema, {
+      method: "POST",
+      body: form,
+    });
   },
 
   deleteAttachment: async (id: string) => {
@@ -78,7 +110,10 @@ export const api = {
   },
 
   createCampaign: (input: CreateCampaignInput) =>
-    requestJson("/api/campaigns", createCampaignResponseSchema, { method: "POST", body: JSON.stringify(input) }),
+    requestJson("/api/campaigns", createCampaignResponseSchema, {
+      method: "POST",
+      body: JSON.stringify(input),
+    }),
 
   logout: async () => {
     await request("/auth/logout", { method: "POST" });
@@ -93,11 +128,17 @@ export const api = {
   },
 
   setStarred: async (id: string, starred: boolean) => {
-    await request(`/api/emails/${id}/star`, { method: "PUT", body: JSON.stringify({ starred }) });
+    await request(`/api/emails/${id}/star`, {
+      method: "PUT",
+      body: JSON.stringify({ starred }),
+    });
   },
 
   setArchived: async (id: string, archived: boolean) => {
-    await request(`/api/emails/${id}/archive`, { method: "PUT", body: JSON.stringify({ archived }) });
+    await request(`/api/emails/${id}/archive`, {
+      method: "PUT",
+      body: JSON.stringify({ archived }),
+    });
   },
 
   deleteEmail: async (id: string) => {
@@ -110,4 +151,5 @@ export const queryKeys = {
   emails: (params: ListEmailsParams) => ["emails", params] as const,
   allEmails: ["emails"] as const,
   email: (id: string) => ["emails", "detail", id] as const,
+  emailStats: ["emails", "stats"] as const,
 };

@@ -48,6 +48,15 @@ export function EmailDetail({
     onError: (error) => toast.error(`Couldn't archive: ${error.message}`),
   });
 
+  const retryMutation = useMutation({
+    mutationFn: () => api.retryEmail(emailId),
+    onSuccess: () => {
+      refresh();
+      toast.success("Email re-queued — it will send shortly");
+    },
+    onError: (error) => toast.error(`Couldn't retry: ${error.message}`),
+  });
+
   const deleteMutation = useMutation({
     mutationFn: () => api.deleteEmail(emailId),
     onSuccess: () => {
@@ -93,6 +102,16 @@ export function EmailDetail({
         </h1>
         {email && (
           <div className="flex items-center gap-2">
+            {email.status === "failed" && (
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => retryMutation.mutate()}
+                loading={retryMutation.isPending}
+              >
+                Retry
+              </Button>
+            )}
             <Button
               variant="ghost"
               size="sm"

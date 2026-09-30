@@ -188,6 +188,14 @@ export const listEmailsResponseSchema = z.object({
 });
 export type ListEmailsResponse = z.infer<typeof listEmailsResponseSchema>;
 
+export const emailStatsSchema = z.object({
+  scheduled: z.number().int(),
+  sending: z.number().int(),
+  sent: z.number().int(),
+  failed: z.number().int(),
+});
+export type EmailStats = z.infer<typeof emailStatsSchema>;
+
 export const updateEmailSchema = z
   .object({ starred: z.boolean().optional(), archived: z.boolean().optional() })
   .refine(

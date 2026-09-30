@@ -1,4 +1,15 @@
-import { and, asc, eq, gt, inArray, lt, lte, ne, sql } from "drizzle-orm";
+import {
+  and,
+  asc,
+  count,
+  eq,
+  gt,
+  inArray,
+  lt,
+  lte,
+  ne,
+  sql,
+} from "drizzle-orm";
 import { db } from "./client.js";
 import { campaigns, emails } from "./schema.js";
 
@@ -186,6 +197,56 @@ export async function setArchived(
     .update(emails)
     .set({ archivedAt: archived ? new Date() : null })
     .where(and(eq(emails.id, emailId), eq(emails.userId, userId)));
+  return result.affectedRows === 1;
+}
+
+/** Per-status counts across all of a user's unarchived emails. */
+export async function getEmailStats(
+  userId: string,
+): Promise<{
+  scheduled: number;
+  sending: number;
+  sent: number;
+  failed: number;
+}> {
+  const rows = await db
+    .select({ status: emails.status, total: count() })
+    .from(emails)
+    .where(and(eq(emails.userId, userId), sql`${emails.archivedAt} IS NULL`))
+    .groupBy(emails.status);
+  const map = Object.fromEntries(rows.map((r) => [r.status, r.total]));
+  return {
+    scheduled: map["scheduled"] ?? 0,
+    sending: map["sending"] ?? 0,
+    sent: map["sent"] ?? 0,
+    failed: map["failed"] ?? 0,
+  };
+}
+
+/**
+ * Resets a `failed` email to `scheduled` so the worker can pick it up again.
+ * Returns false when the email doesn't exist, belongs to another user, or isn't failed.
+ */
+export async function retryEmail(
+  userId: string,
+  emailId: string,
+): Promise<boolean> {
+  const [result] = await db
+    .update(emails)
+    .set({
+      status: "scheduled",
+      scheduledAt: new Date(),
+      error: null,
+      leaseToken: null,
+      leaseExpiresAt: null,
+    })
+    .where(
+      and(
+        eq(emails.id, emailId),
+        eq(emails.userId, userId),
+        eq(emails.status, "failed"),
+      ),
+    );
   return result.affectedRows === 1;
 }
 
