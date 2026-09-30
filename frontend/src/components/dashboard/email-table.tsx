@@ -180,6 +180,15 @@ export function EmailTable({
 
   return (
     <>
+      <div className="mb-2 flex items-center justify-end px-4">
+        <span className="flex items-center gap-1.5 text-xs text-ink-muted">
+          <span className="relative flex h-2 w-2">
+            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[#068736] opacity-75" />
+            <span className="relative inline-flex h-2 w-2 rounded-full bg-[#068736]" />
+          </span>
+          Live · updates every 5s
+        </span>
+      </div>
       <TableHeader tab={tab} />
       <ul aria-label={tab === "scheduled" ? "Scheduled emails" : "Sent emails"}>
         {rows
