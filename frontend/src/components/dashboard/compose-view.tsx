@@ -24,7 +24,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/field";
 import { RichTextEditor } from "@/components/ui/rich-text-editor";
 import { api, queryKeys } from "@/lib/api";
-import { formatDateTime, tomorrowAt } from "@/lib/format";
+import { formatDateTime, toDateTimeLocalValue, tomorrowAt } from "@/lib/format";
 import { parseLeadsFile } from "@/lib/leads";
 
 const DEFAULT_DELAY_SECONDS = 2;
@@ -35,6 +35,18 @@ const QUICK_TIMES = [
   { label: "Tomorrow, 10:00 AM", hour: 10 },
   { label: "Tomorrow, 11:00 AM", hour: 11 },
   { label: "Tomorrow, 3:00 PM", hour: 15 },
+];
+
+function offsetNow(minutes: number): string {
+  return toDateTimeLocalValue(new Date(Date.now() + minutes * 60_000));
+}
+
+const PRESETS = [
+  { label: "In 15 min", value: () => offsetNow(15) },
+  { label: "In 1 hour", value: () => offsetNow(60) },
+  { label: "In 3 hours", value: () => offsetNow(180) },
+  { label: "Tomorrow 9 AM", value: () => tomorrowAt(9) },
+  { label: "Tomorrow 3 PM", value: () => tomorrowAt(15) },
 ];
 
 type FieldName =
@@ -490,18 +502,76 @@ export function ComposeView({
 
         <div>
           <div className={ROW}>
-            <label htmlFor="send-at" className={LABEL}>
-              Send at
-            </label>
-            <input
-              id="send-at"
-              type="datetime-local"
-              value={scheduledAt}
-              onChange={(e) => setScheduledAt(e.target.value)}
-              aria-invalid={errors.startAt ? true : undefined}
-              className={UNDERLINE_INPUT}
-            />
+            <span className={LABEL}>Send at</span>
+            <div className="flex flex-1 flex-wrap gap-2">
+              {PRESETS.map(({ label, value }) => {
+                const preset = value();
+                const active = scheduledAt === preset;
+                return (
+                  <button
+                    key={label}
+                    type="button"
+                    onClick={() => setScheduledAt(preset)}
+                    className={`rounded-pill border px-3 py-1.5 text-[13px] font-medium transition-colors ${
+                      active
+                        ? "border-brand-600 bg-mint text-brand-600"
+                        : "border-border text-ink-muted hover:border-brand-600 hover:text-brand-600"
+                    }`}
+                  >
+                    {label}
+                  </button>
+                );
+              })}
+              <button
+                type="button"
+                onClick={() => {
+                  const custom = document.getElementById(
+                    "send-at-custom",
+                  ) as HTMLInputElement | null;
+                  custom?.showPicker?.();
+                  custom?.focus();
+                }}
+                className={`rounded-pill border px-3 py-1.5 text-[13px] font-medium transition-colors ${
+                  scheduledAt && !PRESETS.some((p) => p.value() === scheduledAt)
+                    ? "border-brand-600 bg-mint text-brand-600"
+                    : "border-border text-ink-muted hover:border-brand-600 hover:text-brand-600"
+                }`}
+              >
+                {scheduledAt && !PRESETS.some((p) => p.value() === scheduledAt)
+                  ? `Custom: ${new Date(scheduledAt).toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}`
+                  : "Custom…"}
+              </button>
+              <input
+                id="send-at-custom"
+                type="datetime-local"
+                value={scheduledAt}
+                onChange={(e) => setScheduledAt(e.target.value)}
+                aria-label="Custom send time"
+                className="sr-only"
+              />
+            </div>
           </div>
+          {scheduledAt && (
+            <p className="mt-1.5 pl-32 text-xs text-ink-muted">
+              Sends{" "}
+              <strong className="text-ink">
+                {new Date(scheduledAt).toLocaleString(undefined, {
+                  weekday: "short",
+                  month: "short",
+                  day: "numeric",
+                  hour: "numeric",
+                  minute: "2-digit",
+                })}
+              </strong>{" "}
+              <button
+                type="button"
+                onClick={() => setScheduledAt("")}
+                className="ml-1 text-brand-600 hover:underline"
+              >
+                Clear
+              </button>
+            </p>
+          )}
           {errors.startAt && (
             <p role="alert" className="mt-1 pl-32 text-xs text-danger-fg">
               {errors.startAt}
