@@ -1,4 +1,4 @@
-import { Client } from "@elastic/elasticsearch";
+import { Client, type estypes } from "@elastic/elasticsearch";
 import type { EmailStatus } from "@scheduler/shared";
 import { env } from "../config/env.js";
 
@@ -20,13 +20,15 @@ export interface EmailDocument {
   updatedAt: string;
   previewUrl: string | null;
   error: string | null;
+  starred: boolean;
+  archived: boolean;
 }
 
 let indexReady: Promise<void> | null = null;
 
 /**
- * Creates the index with explicit mappings if it does not exist yet. Memoized on success and
- * called before every write, so Elasticsearch never auto-creates it with guessed mappings.
+ * Ensures the index exists with the current mappings. Memoized on success and called before
+ * every write, so Elasticsearch never auto-creates it with guessed mappings.
  */
 export function ensureEmailIndex(): Promise<void> {
   indexReady ??= createIndexIfMissing().catch((error: unknown) => {
@@ -36,30 +38,40 @@ export function ensureEmailIndex(): Promise<void> {
   return indexReady;
 }
 
+/** Field mappings. Adding fields here upgrades existing indexes on the next `ensureEmailIndex`. */
+const EMAIL_PROPERTIES = {
+  id: { type: "keyword" },
+  userId: { type: "keyword" },
+  campaignId: { type: "keyword" },
+  // search_as_you_type adds n-gram subfields, so "ada@ex" matches while typing.
+  recipient: { type: "search_as_you_type" },
+  subject: { type: "search_as_you_type" },
+  body: { type: "text" },
+  sender: { type: "keyword" },
+  status: { type: "keyword" },
+  scheduledAt: { type: "date" },
+  sentAt: { type: "date" },
+  updatedAt: { type: "date" },
+  previewUrl: { type: "keyword", index: false },
+  error: { type: "text", index: false },
+  starred: { type: "boolean" },
+  archived: { type: "boolean" },
+} satisfies Record<string, estypes.MappingProperty>;
+
+/**
+ * Creates the index if missing; otherwise applies the current mappings to it. Put-mapping
+ * only ever adds fields (and is a no-op for unchanged ones), so an index created by an older
+ * version of the app picks up new fields instead of rejecting documents under strict mapping.
+ */
 async function createIndexIfMissing(): Promise<void> {
-  if (await es.indices.exists({ index: EMAIL_INDEX })) return;
+  if (await es.indices.exists({ index: EMAIL_INDEX })) {
+    await es.indices.putMapping({ index: EMAIL_INDEX, properties: EMAIL_PROPERTIES });
+    return;
+  }
   try {
     await es.indices.create({
       index: EMAIL_INDEX,
-      mappings: {
-        dynamic: "strict",
-        properties: {
-          id: { type: "keyword" },
-          userId: { type: "keyword" },
-          campaignId: { type: "keyword" },
-          // search_as_you_type adds n-gram subfields, so "ada@ex" matches while typing.
-          recipient: { type: "search_as_you_type" },
-          subject: { type: "search_as_you_type" },
-          body: { type: "text" },
-          sender: { type: "keyword" },
-          status: { type: "keyword" },
-          scheduledAt: { type: "date" },
-          sentAt: { type: "date" },
-          updatedAt: { type: "date" },
-          previewUrl: { type: "keyword", index: false },
-          error: { type: "text", index: false },
-        },
-      },
+      mappings: { dynamic: "strict", properties: EMAIL_PROPERTIES },
     });
   } catch (error) {
     // Another process created it between our check and create.

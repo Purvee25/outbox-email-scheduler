@@ -1,11 +1,16 @@
 import type { estypes } from "@elastic/elasticsearch";
-import type { EmailStatus, ListEmailsResponse } from "@scheduler/shared";
+import {
+  bodyPreview,
+  type EmailStatus,
+  type ListEmailsResponse,
+} from "@scheduler/shared";
 import { EMAIL_INDEX, es, type EmailDocument } from "./client.js";
 
 export interface SearchEmailsParams {
   userId: string;
   text: string;
   statuses: readonly EmailStatus[];
+  isArchived: boolean;
   sortField: "scheduledAt" | "updatedAt";
   sortOrder: "asc" | "desc";
   page: number;
@@ -39,6 +44,7 @@ export async function searchEmails(
         filter: [
           { term: { userId: params.userId } },
           { terms: { status: [...params.statuses] } },
+          { term: { archived: params.isArchived } },
         ],
         must: [
           {
@@ -67,12 +73,15 @@ export async function searchEmails(
           id: doc.id,
           recipient: doc.recipient,
           subject: doc.subject,
+          preview: bodyPreview(doc.body),
           sender: doc.sender,
           status: doc.status,
           scheduledAt: doc.scheduledAt,
           sentAt: doc.sentAt,
           previewUrl: doc.previewUrl,
           error: doc.error,
+          starred: doc.starred,
+          archived: doc.archived,
         },
       ];
     }),

@@ -26,6 +26,28 @@ export type MeResponse = z.infer<typeof meResponseSchema>;
 export const MAX_RECIPIENTS_PER_CAMPAIGN = 5000;
 export const MAX_DELAY_BETWEEN_EMAILS_MS = 60 * 60 * 1000;
 
+export const MAX_ATTACHMENTS_PER_CAMPAIGN = 5;
+export const MAX_ATTACHMENT_BYTES = 5 * 1024 * 1024;
+/** Sent to every recipient, so keep the per-message total modest. */
+export const MAX_ATTACHMENT_TOTAL_BYTES = 10 * 1024 * 1024;
+export const ALLOWED_ATTACHMENT_TYPES = [
+  "image/png",
+  "image/jpeg",
+  "image/gif",
+  "image/webp",
+  "application/pdf",
+  "text/plain",
+  "text/csv",
+] as const;
+
+export const attachmentSchema = z.object({
+  id: z.uuid(),
+  filename: z.string(),
+  contentType: z.string(),
+  size: z.number().int(),
+});
+export type Attachment = z.infer<typeof attachmentSchema>;
+
 export const createCampaignSchema = z.object({
   subject: z
     .string()
@@ -44,6 +66,7 @@ export const createCampaignSchema = z.object({
       MAX_RECIPIENTS_PER_CAMPAIGN,
       `At most ${MAX_RECIPIENTS_PER_CAMPAIGN} recipients per campaign`,
     ),
+  attachmentIds: z.array(z.uuid()).max(MAX_ATTACHMENTS_PER_CAMPAIGN).default([]),
   startAt: z.iso.datetime({ offset: true, error: "Choose a valid start time" }),
   delayMs: z
     .number({ error: "Enter a delay in seconds" })
@@ -69,14 +92,15 @@ export type CreateCampaignResponse = z.infer<
   typeof createCampaignResponseSchema
 >;
 
-/** Dashboard tabs: "scheduled" shows scheduled + sending, "sent" shows sent + failed. */
-export const EMAIL_TABS = ["scheduled", "sent"] as const;
+/** Dashboard tabs: "scheduled" shows scheduled + sending, "sent" and "archived" show sent + failed. */
+export const EMAIL_TABS = ["scheduled", "sent", "archived"] as const;
 export const emailTabSchema = z.enum(EMAIL_TABS);
 export type EmailTab = z.infer<typeof emailTabSchema>;
 
 export const TAB_STATUSES: Record<EmailTab, readonly EmailStatus[]> = {
   scheduled: ["scheduled", "sending"],
   sent: ["sent", "failed"],
+  archived: ["sent", "failed"],
 };
 
 export const MAX_SEARCH_LENGTH = 200;
@@ -100,18 +124,51 @@ export const listEmailsQuerySchema = z
   );
 export type ListEmailsQuery = z.infer<typeof listEmailsQuerySchema>;
 
+const PREVIEW_LENGTH = 140;
+
+const HTML_ENTITIES: Record<string, string> = {
+  "&amp;": "&",
+  "&lt;": "<",
+  "&gt;": ">",
+  "&quot;": '"',
+  "&#39;": "'",
+  "&nbsp;": " ",
+};
+
+/** One-line snippet of a body for list rows: tags dropped, whitespace collapsed, truncated. */
+export function bodyPreview(body: string): string {
+  const flat = body
+    .replace(/<\/(p|li|h[1-3]|blockquote)>|<br\s*\/?>/gi, " ")
+    .replace(/<[^>]*>/g, "")
+    .replace(/&(amp|lt|gt|quot|#39|nbsp);/g, (entity) => HTML_ENTITIES[entity] ?? entity)
+    .replace(/\s+/g, " ")
+    .trim();
+  return flat.length > PREVIEW_LENGTH
+    ? `${flat.slice(0, PREVIEW_LENGTH).trimEnd()}…`
+    : flat;
+}
+
 export const emailListItemSchema = z.object({
   id: z.uuid(),
   recipient: z.email(),
   subject: z.string(),
+  preview: z.string(),
+  starred: z.boolean(),
   sender: z.string(),
   status: emailStatusSchema,
+  archived: z.boolean(),
   scheduledAt: z.iso.datetime(),
   sentAt: z.iso.datetime().nullable(),
   previewUrl: z.url().nullable(),
   error: z.string().nullable(),
 });
 export type EmailListItem = z.infer<typeof emailListItemSchema>;
+
+export const emailDetailSchema = emailListItemSchema.extend({
+  body: z.string(),
+  attachments: z.array(attachmentSchema),
+});
+export type EmailDetail = z.infer<typeof emailDetailSchema>;
 
 export const listEmailsResponseSchema = z.object({
   items: z.array(emailListItemSchema),
@@ -120,3 +177,10 @@ export const listEmailsResponseSchema = z.object({
   total: z.number().int(),
 });
 export type ListEmailsResponse = z.infer<typeof listEmailsResponseSchema>;
+
+export const updateEmailSchema = z
+  .object({ starred: z.boolean().optional(), archived: z.boolean().optional() })
+  .refine((value) => value.starred !== undefined || value.archived !== undefined, {
+    message: "Provide starred or archived",
+  });
+export type UpdateEmailInput = z.infer<typeof updateEmailSchema>;

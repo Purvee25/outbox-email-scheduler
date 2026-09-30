@@ -106,6 +106,7 @@ export async function findEmailForSend(emailId: string) {
   const [row] = await db
     .select({
       id: emails.id,
+      campaignId: emails.campaignId,
       recipient: emails.recipient,
       sender: emails.sender,
       userId: emails.userId,
@@ -156,4 +157,27 @@ export async function scheduledEmailsAfter(
     )
     .orderBy(asc(emails.id))
     .limit(limit);
+}
+
+export async function setStarred(userId: string, emailId: string, starred: boolean): Promise<boolean> {
+  const [result] = await db
+    .update(emails)
+    .set({ starred })
+    .where(and(eq(emails.id, emailId), eq(emails.userId, userId)));
+  return result.affectedRows === 1;
+}
+
+export async function setArchived(userId: string, emailId: string, archived: boolean): Promise<boolean> {
+  const [result] = await db
+    .update(emails)
+    .set({ archivedAt: archived ? new Date() : null })
+    .where(and(eq(emails.id, emailId), eq(emails.userId, userId)));
+  return result.affectedRows === 1;
+}
+
+export async function deleteEmailRow(userId: string, emailId: string): Promise<boolean> {
+  const [result] = await db
+    .delete(emails)
+    .where(and(eq(emails.id, emailId), eq(emails.userId, userId)));
+  return result.affectedRows === 1;
 }

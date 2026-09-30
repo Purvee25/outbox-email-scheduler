@@ -74,6 +74,8 @@ googleAuthRouter.get("/google", async (req, res) => {
   res.redirect(url);
 });
 
+const LOGIN_FAILED_URL = `${env.FRONTEND_ORIGIN}/login?error=signin_failed`;
+
 googleAuthRouter.get("/google/callback", async (req, res) => {
   const { code, state, error } = req.query;
   const { oauthState, codeVerifier } = req.session;
@@ -84,39 +86,49 @@ googleAuthRouter.get("/google/callback", async (req, res) => {
     res.redirect(`${env.FRONTEND_ORIGIN}/login?error=access_denied`);
     return;
   }
-  if (
-    !oauthStatesMatch(oauthState, state) ||
-    typeof code !== "string" ||
-    !codeVerifier
-  ) {
-    throw new HttpError(400, "Invalid OAuth state");
+
+  try {
+    if (
+      !oauthStatesMatch(oauthState, state) ||
+      typeof code !== "string" ||
+      !codeVerifier
+    ) {
+      throw new HttpError(400, "Invalid OAuth state");
+    }
+
+    const client = googleClient();
+    const { tokens } = await client.getToken({ code, codeVerifier });
+    if (!tokens.id_token)
+      throw new HttpError(400, "Google did not return an ID token");
+
+    const ticket = await client.verifyIdToken({
+      idToken: tokens.id_token,
+      audience: env.GOOGLE_CLIENT_ID,
+    });
+    const payload = ticket.getPayload();
+    if (!payload?.sub || !payload.email || !payload.email_verified) {
+      throw new HttpError(403, "Google account email is not verified");
+    }
+
+    const user = await upsertUser({
+      googleId: payload.sub,
+      email: payload.email,
+      name: payload.name ?? payload.email,
+      avatarUrl: payload.picture ?? null,
+    });
+
+    // New session id after login prevents session fixation.
+    await regenerateSession(req);
+    req.session.userId = user.id;
+    res.redirect(`${env.FRONTEND_ORIGIN}/dashboard`);
+  } catch (failure) {
+    // Send the person back to the login page instead of showing raw JSON; keep the reason in logs.
+    req.log.warn(
+      { err: failure, hadSessionState: Boolean(oauthState) },
+      "google sign-in failed",
+    );
+    res.redirect(LOGIN_FAILED_URL);
   }
-
-  const client = googleClient();
-  const { tokens } = await client.getToken({ code, codeVerifier });
-  if (!tokens.id_token)
-    throw new HttpError(400, "Google did not return an ID token");
-
-  const ticket = await client.verifyIdToken({
-    idToken: tokens.id_token,
-    audience: env.GOOGLE_CLIENT_ID,
-  });
-  const payload = ticket.getPayload();
-  if (!payload?.sub || !payload.email || !payload.email_verified) {
-    throw new HttpError(403, "Google account email is not verified");
-  }
-
-  const user = await upsertUser({
-    googleId: payload.sub,
-    email: payload.email,
-    name: payload.name ?? payload.email,
-    avatarUrl: payload.picture ?? null,
-  });
-
-  // New session id after login prevents session fixation.
-  await regenerateSession(req);
-  req.session.userId = user.id;
-  res.redirect(`${env.FRONTEND_ORIGIN}/dashboard`);
 });
 
 googleAuthRouter.post("/logout", (req, res, next) => {

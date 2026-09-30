@@ -14,7 +14,9 @@ export interface OutgoingEmail {
   from: string;
   to: string;
   subject: string;
+  html: string;
   text: string;
+  attachments?: { filename: string; contentType: string; content: Buffer }[];
 }
 
 export interface SendResult {
@@ -56,7 +58,9 @@ export async function sendEmail(email: OutgoingEmail): Promise<SendResult> {
     from: email.from,
     to: email.to,
     subject: email.subject,
+    html: email.html,
     text: email.text,
+    attachments: email.attachments,
   });
   const previewUrl =
     env.MAIL_TRANSPORT === "ethereal"

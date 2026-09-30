@@ -1,4 +1,5 @@
 import type { Job } from "bullmq";
+import { deleteStaleUnclaimedAttachments } from "../db/attachment-repo.js";
 import { expireLeases, scheduledEmailsAfter } from "../db/email-repo.js";
 import { logger } from "../lib/logger.js";
 import { enqueueEmails, maintenanceQueue } from "./queues.js";
@@ -9,6 +10,8 @@ const RECONCILE_BATCH_SIZE = 500;
 /** Scheduled emails this far overdue should already be in Redis; re-add them if not. */
 const OVERDUE_GRACE_MS = 60_000;
 const LEASE_SWEEP_JOB = "lease-sweep";
+/** Uploads not used by a campaign within this window are deleted by the sweep. */
+export const UNCLAIMED_ATTACHMENT_TTL_MS = 24 * 60 * 60 * 1000;
 
 /**
  * Re-enqueues `scheduled` rows from MySQL (the source of truth). Rows that already have a
@@ -66,6 +69,10 @@ export async function processMaintenanceJob(job: Job): Promise<void> {
       await requestIndexing(expired);
     }
     await reconcileScheduledEmails(new Date(Date.now() - OVERDUE_GRACE_MS));
+    const removed = await deleteStaleUnclaimedAttachments(
+      new Date(Date.now() - UNCLAIMED_ATTACHMENT_TTL_MS),
+    );
+    if (removed > 0) logger.info({ removed }, "deleted unclaimed attachment uploads");
   } finally {
     await scheduleNextSweep();
   }

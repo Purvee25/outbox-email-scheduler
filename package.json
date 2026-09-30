@@ -10,7 +10,10 @@
     "dev:api": "npm run dev:api -w backend",
     "dev:worker": "npm run dev:worker -w backend",
     "typecheck": "npm run typecheck --workspaces --if-present",
-    "test": "npm run test --workspaces --if-present"
+    "test": "npm run test --workspaces --if-present",
+    "load-test": "node scripts/load-test.mjs",
+    "reindex": "npm run reindex -w backend",
+    "doctor": "node scripts/check-env.mjs"
   },
   "engines": {
     "node": ">=20"

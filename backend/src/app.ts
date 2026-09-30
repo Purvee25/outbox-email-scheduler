@@ -17,6 +17,7 @@ import { logger } from "./lib/logger.js";
 import { redis, sessionRedis } from "./lib/redis.js";
 import { requireAdmin, requireAuth, requireTrustedOrigin } from "./middleware/auth.js";
 import { createRateLimiters } from "./middleware/rate-limit.js";
+import { attachmentsRouter } from "./routes/attachments.js";
 import { campaignsRouter, emailsRouter } from "./routes/campaigns.js";
 import { meRouter } from "./routes/me.js";
 import { slackRouter } from "./routes/slack.js";
@@ -78,6 +79,7 @@ export function createApp(): express.Express {
   app.post("/api/campaigns", requireAuth, limiters.createCampaign);
   app.use("/api/campaigns", requireAuth, campaignsRouter);
   app.use("/api/emails", requireAuth, emailsRouter);
+  app.use("/api/attachments", requireAuth, attachmentsRouter);
   app.use("/api/slack", requireAuth, slackRouter);
   app.use(BULL_BOARD_PATH, requireAuth, requireAdmin, createBullBoardRouter());
 

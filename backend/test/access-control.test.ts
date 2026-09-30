@@ -79,6 +79,43 @@ describe("per-user isolation", () => {
     expect(ownerList.body.total).toBe(1);
     expect(otherList.body.total).toBe(0);
   });
+
+  it("serves an email's body to its owner only", async () => {
+    const owner = await login();
+    const other = await login();
+    await request(app)
+      .post("/api/campaigns")
+      .set("Cookie", owner.cookie)
+      .set("Origin", FRONTEND_ORIGIN)
+      .send({
+        subject: "Hi",
+        body: "Secret body",
+        recipients: ["lead@example.test"],
+        startAt: new Date(Date.now() + 3_600_000).toISOString(),
+        delayMs: 0,
+        hourlyLimit: 10,
+      })
+      .expect(201);
+    const list = await request(app)
+      .get("/api/emails?tab=scheduled")
+      .set("Cookie", owner.cookie);
+    const emailId = list.body.items[0].id;
+
+    const asOwner = await request(app)
+      .get(`/api/emails/${emailId}`)
+      .set("Cookie", owner.cookie);
+    const asOther = await request(app)
+      .get(`/api/emails/${emailId}`)
+      .set("Cookie", other.cookie);
+    const malformed = await request(app)
+      .get("/api/emails/not-a-uuid")
+      .set("Cookie", owner.cookie);
+
+    expect(asOwner.status).toBe(200);
+    expect(asOwner.body.body).toBe("<p>Secret body</p>");
+    expect(asOther.status).toBe(404);
+    expect(malformed.status).toBe(400);
+  });
 });
 
 describe("request validation", () => {
@@ -92,6 +129,17 @@ describe("request validation", () => {
 
     expect(res.status).toBe(400);
     expect(res.body.error).toContain("recipients.0");
+  });
+});
+
+describe("google sign-in callback", () => {
+  it("sends a failed sign-in back to the login page instead of showing raw JSON", async () => {
+    const res = await request(app).get("/auth/google/callback?code=x&state=y");
+
+    expect(res.status).toBe(302);
+    expect(res.headers.location).toBe(
+      `${FRONTEND_ORIGIN}/login?error=signin_failed`,
+    );
   });
 });
 

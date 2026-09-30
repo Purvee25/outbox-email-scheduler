@@ -2,6 +2,7 @@ import { eq, inArray } from "drizzle-orm";
 import { db } from "../db/client.js";
 import { campaigns, emails } from "../db/schema.js";
 import { EMAIL_INDEX, ensureEmailIndex, es, type EmailDocument } from "./client.js";
+import { htmlToText, toSafeHtml } from "../lib/html.js";
 
 /** Reads the current state of the given emails from MySQL, the source of truth. */
 async function loadDocuments(
@@ -22,13 +23,17 @@ async function loadDocuments(
       updatedAt: emails.updatedAt,
       previewUrl: emails.previewUrl,
       error: emails.error,
+      starred: emails.starred,
+      archivedAt: emails.archivedAt,
     })
     .from(emails)
     .innerJoin(campaigns, eq(campaigns.id, emails.campaignId))
     .where(inArray(emails.id, [...emailIds]));
 
-  return rows.map((row) => ({
+  return rows.map(({ archivedAt, ...row }) => ({
     ...row,
+    body: htmlToText(toSafeHtml(row.body)),
+    archived: archivedAt !== null,
     scheduledAt: row.scheduledAt.toISOString(),
     sentAt: row.sentAt?.toISOString() ?? null,
     updatedAt: row.updatedAt.toISOString(),

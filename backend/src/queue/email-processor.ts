@@ -17,6 +17,8 @@ import { acquireSendTurn, reserveSendSlot } from "../scheduling/send-slots.js";
 import { notifyRateLimitHit } from "./notifications.js";
 import type { EmailJobData } from "./queues.js";
 import { requestIndexingSafely } from "./search-index.js";
+import { loadCampaignFiles } from "../db/attachment-repo.js";
+import { htmlToText, toSafeHtml } from "../lib/html.js";
 
 /** Longer than SMTP timeouts plus lock renewal, so a live worker never loses its lease. */
 export const LEASE_MS = 5 * 60 * 1000;
@@ -74,12 +76,15 @@ export async function processEmailJob(
 
   const attempts = await recordAttempt(emailId, leaseToken);
   try {
+    const files = await loadCampaignFiles(email.campaignId);
     const result = await sendEmail({
       emailId,
       from: email.sender,
       to: email.recipient,
       subject: email.subject,
-      text: email.body,
+      html: toSafeHtml(email.body),
+      text: htmlToText(toSafeHtml(email.body)),
+      attachments: files.map(({ data, ...file }) => ({ ...file, content: data })),
     });
     await markSent(emailId, leaseToken, result);
     requestIndexingSafely([emailId]);

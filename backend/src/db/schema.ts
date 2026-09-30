@@ -1,5 +1,7 @@
 import { sql } from "drizzle-orm";
 import {
+  boolean,
+  customType,
   datetime,
   index,
   int,
@@ -11,6 +13,10 @@ import {
   varchar,
 } from "drizzle-orm/mysql-core";
 import { EMAIL_STATUSES } from "@scheduler/shared";
+
+const longblob = customType<{ data: Buffer; driverData: Buffer }>({
+  dataType: () => "longblob",
+});
 
 const id = () => varchar("id", { length: 36 }).primaryKey();
 const createdAt = () =>
@@ -76,6 +82,11 @@ export const emails = mysqlTable(
     previewUrl: varchar("preview_url", { length: 1024 }),
     sentAt: datetime("sent_at", { fsp: 3 }),
     error: text("error"),
+    starred: boolean("starred").notNull().default(false),
+    // Archive hides a finished email from Sent; delete hides it everywhere (and cancels it if
+    // still scheduled). Rows are kept so history and idempotency stay intact.
+    archivedAt: datetime("archived_at", { fsp: 3 }),
+    deletedAt: datetime("deleted_at", { fsp: 3 }),
     leaseToken: varchar("lease_token", { length: 64 }),
     leaseExpiresAt: datetime("lease_expires_at", { fsp: 3 }),
     createdAt: createdAt(),
@@ -102,3 +113,27 @@ export const emails = mysqlTable(
 
 export type UserRow = typeof users.$inferSelect;
 export type EmailRow = typeof emails.$inferSelect;
+
+/** Uploaded files. `campaignId` stays null until a campaign claims the upload. */
+export const attachments = mysqlTable(
+  "attachments",
+  {
+    id: id(),
+    userId: varchar("user_id", { length: 36 })
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    campaignId: varchar("campaign_id", { length: 36 }).references(
+      () => campaigns.id,
+      { onDelete: "cascade" },
+    ),
+    filename: varchar("filename", { length: 255 }).notNull(),
+    contentType: varchar("content_type", { length: 127 }).notNull(),
+    size: int("size").notNull(),
+    data: longblob("data").notNull(),
+    createdAt: createdAt(),
+  },
+  (table) => [
+    index("attachments_campaign_idx").on(table.campaignId),
+    index("attachments_user_idx").on(table.userId, table.campaignId),
+  ],
+);
