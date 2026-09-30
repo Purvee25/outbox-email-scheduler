@@ -37,17 +37,29 @@ const QUICK_TIMES = [
   { label: "Tomorrow, 3:00 PM", hour: 15 },
 ];
 
-function offsetNow(minutes: number): string {
-  return toDateTimeLocalValue(new Date(Date.now() + minutes * 60_000));
+type SendUnit = "seconds" | "minutes" | "hours";
+
+function offsetNow(amount: number, unit: SendUnit): string {
+  const ms =
+    unit === "seconds"
+      ? amount * 1_000
+      : unit === "minutes"
+        ? amount * 60_000
+        : amount * 3_600_000;
+  return toDateTimeLocalValue(new Date(Date.now() + ms));
 }
 
-const PRESETS = [
-  { label: "In 15 min", value: () => offsetNow(15) },
-  { label: "In 1 hour", value: () => offsetNow(60) },
-  { label: "In 3 hours", value: () => offsetNow(180) },
-  { label: "Tomorrow 9 AM", value: () => tomorrowAt(9) },
-  { label: "Tomorrow 3 PM", value: () => tomorrowAt(15) },
-];
+const UNIT_LABELS: Record<SendUnit, string> = {
+  seconds: "Seconds",
+  minutes: "Minutes",
+  hours: "Hours",
+};
+
+const UNIT_MAX: Record<SendUnit, number> = {
+  seconds: 3600,
+  minutes: 1440,
+  hours: 720,
+};
 
 type FieldName =
   "subject" | "body" | "recipients" | "startAt" | "delayMs" | "hourlyLimit";
@@ -134,6 +146,9 @@ export function ComposeView({
   const [notice, setNotice] = useState<string | null>(null);
   const [scheduledAt, setScheduledAt] = useState("");
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [sendAmount, setSendAmount] = useState(30);
+  const [sendUnit, setSendUnit] = useState<SendUnit>("minutes");
+  const [sendMode, setSendMode] = useState<"offset" | "custom" | null>(null);
   const [parsing, setParsing] = useState(false);
   const [errors, setErrors] = useState<FieldErrors>({});
 
@@ -503,75 +518,170 @@ export function ComposeView({
         <div>
           <div className={ROW}>
             <span className={LABEL}>Send at</span>
-            <div className="flex flex-1 flex-wrap gap-2">
-              {PRESETS.map(({ label, value }) => {
-                const preset = value();
-                const active = scheduledAt === preset;
-                return (
+            <div className="flex flex-1 flex-col gap-3">
+              {/* Row 1: scroll number + unit buttons + custom */}
+              <div className="flex items-center gap-2">
+                {/* Number scroll input */}
+                <div className="flex flex-col items-center">
                   <button
-                    key={label}
                     type="button"
-                    onClick={() => setScheduledAt(preset)}
-                    className={`rounded-pill border px-3 py-1.5 text-[13px] font-medium transition-colors ${
-                      active
+                    aria-label="Increase"
+                    onClick={() => {
+                      const next = Math.min(sendAmount + 1, UNIT_MAX[sendUnit]);
+                      setSendAmount(next);
+                      if (sendMode === "offset")
+                        setScheduledAt(offsetNow(next, sendUnit));
+                    }}
+                    className="flex h-7 w-14 items-center justify-center rounded-t-lg border border-b-0 border-border bg-field text-ink-muted hover:bg-mint hover:text-brand-600"
+                  >
+                    <svg
+                      viewBox="0 0 20 20"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      className="size-3.5"
+                    >
+                      <path d="M5 12.5l5-5 5 5" />
+                    </svg>
+                  </button>
+                  <input
+                    type="number"
+                    min={1}
+                    max={UNIT_MAX[sendUnit]}
+                    value={sendAmount}
+                    onChange={(e) => {
+                      const v = Math.max(
+                        1,
+                        Math.min(Number(e.target.value), UNIT_MAX[sendUnit]),
+                      );
+                      setSendAmount(v);
+                      if (sendMode === "offset")
+                        setScheduledAt(offsetNow(v, sendUnit));
+                    }}
+                    onWheel={(e) => {
+                      e.preventDefault();
+                      const delta = e.deltaY < 0 ? 1 : -1;
+                      const next = Math.max(
+                        1,
+                        Math.min(sendAmount + delta, UNIT_MAX[sendUnit]),
+                      );
+                      setSendAmount(next);
+                      if (sendMode === "offset")
+                        setScheduledAt(offsetNow(next, sendUnit));
+                    }}
+                    className="h-11 w-14 border border-border bg-white text-center text-lg font-semibold tabular-nums focus:border-brand-500 focus:outline-none"
+                  />
+                  <button
+                    type="button"
+                    aria-label="Decrease"
+                    onClick={() => {
+                      const next = Math.max(1, sendAmount - 1);
+                      setSendAmount(next);
+                      if (sendMode === "offset")
+                        setScheduledAt(offsetNow(next, sendUnit));
+                    }}
+                    className="flex h-7 w-14 items-center justify-center rounded-b-lg border border-t-0 border-border bg-field text-ink-muted hover:bg-mint hover:text-brand-600"
+                  >
+                    <svg
+                      viewBox="0 0 20 20"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      className="size-3.5"
+                    >
+                      <path d="M5 7.5l5 5 5-5" />
+                    </svg>
+                  </button>
+                </div>
+
+                {/* Unit buttons */}
+                <div className="flex flex-col gap-1">
+                  {(["seconds", "minutes", "hours"] as SendUnit[]).map((u) => (
+                    <button
+                      key={u}
+                      type="button"
+                      onClick={() => {
+                        setSendUnit(u);
+                        setSendMode("offset");
+                        setScheduledAt(offsetNow(sendAmount, u));
+                      }}
+                      className={`h-[33px] w-24 rounded-control border text-[13px] font-medium transition-colors ${
+                        sendMode === "offset" && sendUnit === u
+                          ? "border-brand-600 bg-mint text-brand-600"
+                          : "border-border text-ink-muted hover:border-brand-600 hover:text-brand-600"
+                      }`}
+                    >
+                      {UNIT_LABELS[u]}
+                    </button>
+                  ))}
+                </div>
+
+                <span className="text-ink-muted text-[13px] px-1">or</span>
+
+                {/* Custom date+time */}
+                <div className="flex flex-col gap-1">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSendMode("custom");
+                      const el = document.getElementById(
+                        "send-at-custom",
+                      ) as HTMLInputElement | null;
+                      el?.showPicker?.();
+                      el?.focus();
+                    }}
+                    className={`h-[33px] rounded-control border px-4 text-[13px] font-medium transition-colors ${
+                      sendMode === "custom"
                         ? "border-brand-600 bg-mint text-brand-600"
                         : "border-border text-ink-muted hover:border-brand-600 hover:text-brand-600"
                     }`}
                   >
-                    {label}
+                    📅 Pick date & time
                   </button>
-                );
-              })}
-              <button
-                type="button"
-                onClick={() => {
-                  const custom = document.getElementById(
-                    "send-at-custom",
-                  ) as HTMLInputElement | null;
-                  custom?.showPicker?.();
-                  custom?.focus();
-                }}
-                className={`rounded-pill border px-3 py-1.5 text-[13px] font-medium transition-colors ${
-                  scheduledAt && !PRESETS.some((p) => p.value() === scheduledAt)
-                    ? "border-brand-600 bg-mint text-brand-600"
-                    : "border-border text-ink-muted hover:border-brand-600 hover:text-brand-600"
-                }`}
-              >
-                {scheduledAt && !PRESETS.some((p) => p.value() === scheduledAt)
-                  ? `Custom: ${new Date(scheduledAt).toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}`
-                  : "Custom…"}
-              </button>
-              <input
-                id="send-at-custom"
-                type="datetime-local"
-                value={scheduledAt}
-                onChange={(e) => setScheduledAt(e.target.value)}
-                aria-label="Custom send time"
-                className="sr-only"
-              />
+                  <input
+                    id="send-at-custom"
+                    type="datetime-local"
+                    value={sendMode === "custom" ? scheduledAt : ""}
+                    onChange={(e) => {
+                      setSendMode("custom");
+                      setScheduledAt(e.target.value);
+                    }}
+                    className="h-[33px] w-full rounded-control border border-border bg-white px-3 text-[13px] focus:border-brand-500 focus:outline-none"
+                  />
+                </div>
+              </div>
+
+              {/* Confirmation */}
+              {scheduledAt && (
+                <p className="text-xs text-ink-muted">
+                  Sends{" "}
+                  <strong className="text-ink">
+                    {new Date(scheduledAt).toLocaleString(undefined, {
+                      weekday: "short",
+                      month: "short",
+                      day: "numeric",
+                      hour: "numeric",
+                      minute: "2-digit",
+                    })}
+                  </strong>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setScheduledAt("");
+                      setSendMode(null);
+                    }}
+                    className="ml-2 text-brand-600 hover:underline"
+                  >
+                    Clear
+                  </button>
+                </p>
+              )}
             </div>
           </div>
-          {scheduledAt && (
-            <p className="mt-1.5 pl-32 text-xs text-ink-muted">
-              Sends{" "}
-              <strong className="text-ink">
-                {new Date(scheduledAt).toLocaleString(undefined, {
-                  weekday: "short",
-                  month: "short",
-                  day: "numeric",
-                  hour: "numeric",
-                  minute: "2-digit",
-                })}
-              </strong>{" "}
-              <button
-                type="button"
-                onClick={() => setScheduledAt("")}
-                className="ml-1 text-brand-600 hover:underline"
-              >
-                Clear
-              </button>
-            </p>
-          )}
           {errors.startAt && (
             <p role="alert" className="mt-1 pl-32 text-xs text-danger-fg">
               {errors.startAt}
