@@ -23,42 +23,44 @@ export function CampaignStats() {
   if (total === 0) return null;
 
   return (
-    <div className="mb-4 flex items-center gap-1 rounded-control border border-border bg-field/40 px-2 py-2 text-sm">
+    <div className="mb-4 flex items-stretch rounded-control border border-border bg-white text-sm overflow-hidden">
       {STAT_ITEMS.map(({ key, label, activeColor }, i) => {
         const value = data[key];
         const active = value > 0;
         return (
-          <span key={key} className="flex items-center">
-            {i > 0 && <span className="mx-2 h-4 w-px bg-border" aria-hidden />}
+          <div
+            key={key}
+            className={cn(
+              "flex flex-1 flex-col items-center justify-center gap-0.5 py-3 transition-colors",
+              i > 0 && "border-l border-border",
+              active && "bg-field/30",
+            )}
+          >
             <span
               className={cn(
-                "flex items-baseline gap-1.5 rounded-lg px-3 py-1.5 transition-colors",
-                active && "bg-white shadow-sm",
+                "text-xl font-bold tabular-nums leading-none",
+                active ? activeColor : "text-ink-muted/40",
               )}
             >
-              <span
-                className={cn(
-                  "text-base font-bold tabular-nums leading-none",
-                  active ? activeColor : "text-ink-muted/50",
-                )}
-              >
-                {value.toLocaleString()}
-              </span>
-              <span
-                className={cn(
-                  "text-xs",
-                  active ? "text-ink-muted" : "text-ink-muted/40",
-                )}
-              >
-                {label}
-              </span>
+              {value.toLocaleString()}
             </span>
-          </span>
+            <span
+              className={cn(
+                "text-[11px] font-medium",
+                active ? "text-ink-muted" : "text-ink-muted/30",
+              )}
+            >
+              {label}
+            </span>
+          </div>
         );
       })}
-      <span className="ml-auto pr-2 text-xs text-ink-muted">
-        {total.toLocaleString()} total
-      </span>
+      <div className="flex flex-col items-center justify-center border-l border-border px-5 py-3">
+        <span className="text-xl font-bold tabular-nums text-ink leading-none">
+          {total.toLocaleString()}
+        </span>
+        <span className="text-[11px] font-medium text-ink-muted">Total</span>
+      </div>
     </div>
   );
 }

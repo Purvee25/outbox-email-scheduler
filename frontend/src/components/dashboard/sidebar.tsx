@@ -9,6 +9,7 @@ import { Avatar } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { api, queryKeys } from "@/lib/api";
 import { cn } from "@/lib/cn";
+import { ActivityChart } from "./activity-chart";
 import { SlackControl } from "./slack-control";
 
 const COUNT_POLL_MS = 5_000;
@@ -185,6 +186,13 @@ export function Sidebar({
           />
         ))}
       </nav>
+
+      <div className="mt-3">
+        <p className="px-3 pb-2 text-xs tracking-wide text-ink-muted uppercase">
+          Activity
+        </p>
+        <ActivityChart sidebar />
+      </div>
     </aside>
   );
 }

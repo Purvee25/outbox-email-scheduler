@@ -8,7 +8,6 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
 import { useSession } from "@/hooks/use-session";
-import { ActivityChart } from "./activity-chart";
 import { CampaignStats } from "./campaign-stats";
 import { ComposeView } from "./compose-view";
 import { EmailDetail } from "./email-detail";
@@ -96,7 +95,6 @@ export function Dashboard() {
       />
       <main className="animate-fade-up min-w-0 flex-1 px-4 py-4 md:pr-6">
         <CampaignStats />
-        <ActivityChart />
         <EmailFilters
           tab={tab}
           search={search}
