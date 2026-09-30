@@ -156,17 +156,6 @@ export function Sidebar({
             Integrations
           </p>
           <SlackControl connected={slackConnected} />
-          <div className="my-2 border-t border-border" />
-          <Button
-            variant="ghost"
-            size="sm"
-            id="logout-btn"
-            loading={logout.isPending}
-            onClick={() => logout.mutate()}
-            className="justify-start"
-          >
-            Log out
-          </Button>
         </div>
       </details>
 
@@ -218,6 +207,31 @@ export function Sidebar({
           <span className="flex-1">Analytics</span>
         </button>
       </nav>
+
+      <div className="mt-auto pt-2 border-t border-border">
+        <Button
+          variant="ghost"
+          size="sm"
+          id="logout-btn"
+          loading={logout.isPending}
+          onClick={() => logout.mutate()}
+          className="w-full justify-start text-ink-muted"
+        >
+          <svg
+            viewBox="0 0 20 20"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.5"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            className="size-4 shrink-0"
+            aria-hidden
+          >
+            <path d="M7.5 10h9m0 0-3-3m3 3-3 3M13 6V4a1 1 0 0 0-1-1H4a1 1 0 0 0-1 1v12a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1v-2" />
+          </svg>
+          Log out
+        </Button>
+      </div>
     </aside>
   );
 }
