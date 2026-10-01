@@ -122,7 +122,7 @@ describe("planSends", () => {
     });
     for (let i = 1; i < result.length; i++) {
       const gap =
-        result[i].scheduledAt.getTime() - result[i - 1].scheduledAt.getTime();
+        result[i]!.scheduledAt.getTime() - result[i - 1]!.scheduledAt.getTime();
       expect(gap).toBeGreaterThanOrEqual(HOUR_MS);
     }
   });

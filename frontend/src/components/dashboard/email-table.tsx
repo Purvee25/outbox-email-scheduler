@@ -7,7 +7,7 @@ import {
   useQuery,
   useQueryClient,
 } from "@tanstack/react-query";
-import { type ReactNode, useEffect, useState } from "react";
+import { type ReactNode, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -276,7 +276,19 @@ export function EmailTable({
   onOpen,
 }: EmailTableProps) {
   const queryClient = useQueryClient();
-  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const selectionKey = `${tab}|${page}|${search}|${status}`;
+  const [selectionState, setSelectionState] = useState<{
+    key: string;
+    selected: Set<string>;
+  }>({ key: selectionKey, selected: new Set() });
+
+  const selected =
+    selectionState.key === selectionKey
+      ? selectionState.selected
+      : new Set<string>();
+
+  const setSelected = (next: Set<string>) =>
+    setSelectionState({ key: selectionKey, selected: next });
 
   const params = {
     tab,
@@ -285,6 +297,7 @@ export function EmailTable({
     q: search || undefined,
     status,
   };
+
   const query = useQuery({
     queryKey: queryKeys.emails(params),
     queryFn: () => api.listEmails(params),
@@ -292,11 +305,6 @@ export function EmailTable({
     placeholderData: keepPreviousData,
   });
   const rows = query.data?.items;
-
-  // Clear selection when tab/page/search changes
-  useEffect(() => {
-    setSelected(new Set());
-  }, [tab, page, search, status]);
 
   const invalidate = () =>
     queryClient.invalidateQueries({ queryKey: ["emails"] });
@@ -328,12 +336,10 @@ export function EmailTable({
   const filtered = Boolean(search || status);
 
   const handleSelect = (id: string, v: boolean) => {
-    setSelected((prev) => {
-      const next = new Set(prev);
-      if (v) next.add(id);
-      else next.delete(id);
-      return next;
-    });
+    const next = new Set(selected);
+    if (v) next.add(id);
+    else next.delete(id);
+    setSelected(next);
   };
 
   const handleSelectAll = (v: boolean) => {
