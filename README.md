@@ -30,6 +30,11 @@ survive restarts with zero duplicates, and search every email via Elasticsearch.
 
 ## Demo
 
+> **Interactive demo** — [try it in your browser](https://claude.ai/artifact/MeALRwtZzSkDSWUYXSmV48).
+> A client-side simulation of the dashboard: compose a campaign and watch emails move
+> from Scheduled → Sent using the same scheduling rules (min delay, round-robin senders,
+> rolling hourly limit). No backend, no real emails.
+
 > **Video walkthrough** — _coming soon (recorded before submission deadline)_
 
 What the demo covers:
